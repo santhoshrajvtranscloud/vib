@@ -91,8 +91,8 @@ func (cm *CredentialManager) credFilePath() string {
 
 // getOrCreateKey loads or generates the 32-byte AES-256 key.
 func (cm *CredentialManager) getOrCreateKey() ([]byte, error) {
-	keyPath := cm.keyFilePath()
-	if data, err := os.ReadFile(keyPath); err == nil {
+	keyPath := filepath.Clean(cm.keyFilePath())
+	if data, err := os.ReadFile(keyPath); err == nil { // #nosec G304 -- controlled internal storage path
 		if len(data) == keySizeBytes {
 			return data, nil
 		}
@@ -188,8 +188,8 @@ func (cm *CredentialManager) SaveCustomCredentials(ctx context.Context, creds Cu
 		return nil, fmt.Errorf("AWS credential validation failed: %w", err)
 	}
 
-	// Serialize and encrypt
-	payload, err := json.Marshal(creds)
+	// Serialize and encrypt immediately before disk write
+	payload, err := json.Marshal(creds) // #nosec G117 -- credentials are encrypted immediately with AES-256-GCM
 	if err != nil {
 		return nil, err
 	}
@@ -236,8 +236,8 @@ func (cm *CredentialManager) GetStoredCredentials() (*CustomCredentials, error) 
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 
-	credFile := cm.credFilePath()
-	encrypted, err := os.ReadFile(credFile)
+	credFile := filepath.Clean(cm.credFilePath())
+	encrypted, err := os.ReadFile(credFile) // #nosec G304 -- controlled internal storage path
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil

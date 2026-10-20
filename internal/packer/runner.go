@@ -27,9 +27,18 @@ const (
 )
 
 var (
-	amiRegex      = regexp.MustCompile(`ami-[a-z0-9]{8,17}`)
-	sanitizeRegex = regexp.MustCompile(`[^a-zA-Z0-9_\-]+`)
+	amiRegex          = regexp.MustCompile(`ami-[a-z0-9]{8,17}`)
+	sanitizeRegex     = regexp.MustCompile(`[^a-zA-Z0-9_\-]+`)
+	secretKeyRegex    = regexp.MustCompile(`(?i)(secret[_-]?access[_-]?key|aws[_-]?secret)[\s:=]+([A-Za-z0-9/+=]{40})`)
+	awsSecretValRegex = regexp.MustCompile(`(?i)(AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN)=([^\s]+)`)
 )
+
+// SanitizeLogMessage scrubs sensitive AWS credentials and session tokens from log output.
+func SanitizeLogMessage(msg string) string {
+	msg = secretKeyRegex.ReplaceAllString(msg, "$1: [REDACTED]")
+	msg = awsSecretValRegex.ReplaceAllString(msg, "$1=[REDACTED]")
+	return msg
+}
 
 // LogHandler is a callback function invoked when a new log line is received.
 type LogHandler func(line string)
@@ -150,7 +159,7 @@ func (r *Runner) PrepareWorkDir(cfg *config.BuildConfig, hclBytes []byte, custom
 
 	if customWorkDir != "" {
 		workDir = customWorkDir
-		if err := os.MkdirAll(workDir, 0755); err != nil {
+		if err := os.MkdirAll(workDir, 0750); err != nil {
 			return "", nil, fmt.Errorf("failed to create custom working directory %q: %w", workDir, err)
 		}
 		cleanup = func() {}
@@ -170,7 +179,7 @@ func (r *Runner) PrepareWorkDir(cfg *config.BuildConfig, hclBytes []byte, custom
 	}
 
 	hclFile := filepath.Join(workDir, HCLFileName)
-	if err := os.WriteFile(hclFile, hclBytes, 0644); err != nil {
+	if err := os.WriteFile(hclFile, hclBytes, 0600); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("failed to write %s: %w", HCLFileName, err)
 	}
@@ -409,7 +418,7 @@ func (r *Runner) runCommand(
 		for {
 			line, err := bufReader.ReadString('\n')
 			if len(line) > 0 {
-				cleanLine := strings.TrimRight(line, "\r\n")
+				cleanLine := SanitizeLogMessage(strings.TrimRight(line, "\r\n"))
 				mu.Lock()
 				outputBuf.WriteString(cleanLine)
 				outputBuf.WriteByte('\n')
@@ -451,7 +460,7 @@ func (r *Runner) runCommand(
 
 // ParseManifestFile reads and parses a Packer manifest JSON file.
 func ParseManifestFile(filePath string) (*Manifest, error) {
-	data, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filepath.Clean(filePath))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read manifest file %s: %w", filePath, err)
 	}

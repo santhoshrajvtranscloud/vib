@@ -19,7 +19,12 @@ type BuildConfig struct {
 	CustomScript []string `json:"custom_script,omitempty"`
 }
 
-var amiRegex = regexp.MustCompile(`^ami-[a-z0-9]{8,17}$`)
+var (
+	amiRegex          = regexp.MustCompile(`^ami-[a-z0-9]{8,17}$`)
+	amiNameRegex      = regexp.MustCompile(`^[a-zA-Z0-9-_]{1,128}$`)
+	regionRegex       = regexp.MustCompile(`^[a-z0-9-]+$`)
+	instanceTypeRegex = regexp.MustCompile(`^[a-z0-9]+\.[a-z0-9]+$`)
+)
 
 func ParseAndValidate(data []byte) (*BuildConfig, error) {
 	var cfg BuildConfig
@@ -29,17 +34,17 @@ func ParseAndValidate(data []byte) (*BuildConfig, error) {
 	if strings.TrimSpace(cfg.SSHUsername) == "" {
 		cfg.SSHUsername = "ubuntu"
 	}
-	if strings.TrimSpace(cfg.Region) == "" {
-		return nil, errors.New("region is required")
+	if strings.TrimSpace(cfg.Region) == "" || !regionRegex.MatchString(cfg.Region) {
+		return nil, errors.New("region is required and must be a valid AWS region identifier")
 	}
-	if strings.TrimSpace(cfg.InstanceType) == "" {
-		return nil, errors.New("instance_type is required")
+	if strings.TrimSpace(cfg.InstanceType) == "" || !instanceTypeRegex.MatchString(cfg.InstanceType) {
+		return nil, errors.New("instance_type is required and must be a valid EC2 instance type (e.g. t3.micro)")
 	}
 	if !amiRegex.MatchString(cfg.SourceAMI) {
 		return nil, errors.New("source_ami must be a valid AMI ID starting with 'ami-'")
 	}
-	if strings.TrimSpace(cfg.AMIName) == "" {
-		return nil, errors.New("ami_name is required")
+	if strings.TrimSpace(cfg.AMIName) == "" || !amiNameRegex.MatchString(cfg.AMIName) {
+		return nil, errors.New("ami_name is required and must only contain alphanumeric characters, hyphens, and underscores (1-128 chars)")
 	}
 	return &cfg, nil
 }

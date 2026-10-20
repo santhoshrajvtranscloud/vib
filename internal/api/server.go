@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -119,13 +120,43 @@ func (s *Server) registerRoutes() {
 	}
 }
 
-// corsMiddleware provides CORS support for localhost and modern frontend web apps.
+// isAllowedOrigin strictly validates that the Origin header comes from localhost or loopback interfaces.
+func isAllowedOrigin(origin string) bool {
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
+}
+
+// corsMiddleware provides CORS & CSRF protection for localhost and local Vite development.
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept")
-		w.Header().Set("Access-Control-Max-Age", "86400")
+		origin := r.Header.Get("Origin")
+
+		if origin != "" {
+			if isAllowedOrigin(origin) {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Vary", "Origin")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-VIB-CSRF-Protection, Accept")
+				w.Header().Set("Access-Control-Max-Age", "86400")
+			} else {
+				// Block cross-origin state-changing requests from untrusted external websites
+				if r.Method == http.MethodPost || r.Method == http.MethodDelete || r.Method == http.MethodPut {
+					http.Error(w, "Forbidden: Untrusted cross-origin request blocked", http.StatusForbidden)
+					return
+				}
+			}
+		} else {
+			// Same-origin or non-browser client: allow localhost API access
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-VIB-CSRF-Protection, Accept")
+		}
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

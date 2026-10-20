@@ -105,21 +105,35 @@ func TestCORSHeaders(t *testing.T) {
 	runner := packer.NewRunner(createMockPacker(t))
 	server := NewServer(runner)
 
-	req := httptest.NewRequest(http.MethodOptions, "/api/catalogue", nil)
-	req.Header.Set("Origin", "http://localhost:5173")
-	w := httptest.NewRecorder()
+	t.Run("Allowed localhost origin", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodOptions, "/api/catalogue", nil)
+		req.Header.Set("Origin", "http://localhost:5173")
+		w := httptest.NewRecorder()
 
-	server.Routes().ServeHTTP(w, req)
+		server.Routes().ServeHTTP(w, req)
 
-	if w.Code != http.StatusNoContent {
-		t.Errorf("expected status 204 for OPTIONS preflight, got %d", w.Code)
-	}
-	if w.Header().Get("Access-Control-Allow-Origin") != "*" {
-		t.Errorf("expected Access-Control-Allow-Origin: *, got %q", w.Header().Get("Access-Control-Allow-Origin"))
-	}
-	if !strings.Contains(w.Header().Get("Access-Control-Allow-Methods"), "POST") {
-		t.Errorf("expected Allow-Methods to contain POST, got %q", w.Header().Get("Access-Control-Allow-Methods"))
-	}
+		if w.Code != http.StatusNoContent {
+			t.Errorf("expected status 204 for OPTIONS preflight, got %d", w.Code)
+		}
+		if w.Header().Get("Access-Control-Allow-Origin") != "http://localhost:5173" {
+			t.Errorf("expected Access-Control-Allow-Origin: http://localhost:5173, got %q", w.Header().Get("Access-Control-Allow-Origin"))
+		}
+		if !strings.Contains(w.Header().Get("Access-Control-Allow-Methods"), "POST") {
+			t.Errorf("expected Allow-Methods to contain POST, got %q", w.Header().Get("Access-Control-Allow-Methods"))
+		}
+	})
+
+	t.Run("Blocked untrusted external origin", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/builds", strings.NewReader(`{}`))
+		req.Header.Set("Origin", "https://malicious-website.com")
+		w := httptest.NewRecorder()
+
+		server.Routes().ServeHTTP(w, req)
+
+		if w.Code != http.StatusForbidden {
+			t.Errorf("expected status 403 Forbidden for untrusted origin, got %d", w.Code)
+		}
+	})
 }
 
 func TestGetHealth(t *testing.T) {

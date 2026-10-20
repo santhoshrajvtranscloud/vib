@@ -464,3 +464,36 @@ sleep 10
 		t.Errorf("expected fast cancellation, took %v", elapsed)
 	}
 }
+
+func TestSanitizeLogMessage(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "AWS_SECRET_ACCESS_KEY assignment",
+			input:    "export AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY and proceed",
+			expected: "export AWS_SECRET_ACCESS_KEY: [REDACTED] and proceed",
+		},
+		{
+			name:     "secret_access_key labeled key",
+			input:    "secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+			expected: "secret_access_key: [REDACTED]",
+		},
+		{
+			name:     "Clean log without credentials",
+			input:    "==> amazon-ebs.vib: Prevalidating AMI Name...",
+			expected: "==> amazon-ebs.vib: Prevalidating AMI Name...",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			output := SanitizeLogMessage(tc.input)
+			if output != tc.expected {
+				t.Errorf("got %q, want %q", output, tc.expected)
+			}
+		})
+	}
+}
