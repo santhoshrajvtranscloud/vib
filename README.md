@@ -21,18 +21,18 @@
 
 ### Option 1: One-Line Install Script
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<your-username>/vib/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/santhoshrajvtranscloud/vib/main/scripts/install.sh | bash
 ```
 
 ### Option 2: Run via Docker
 ```bash
-docker run -d -p 8080:8080 -v ~/.aws:/root/.aws:ro ghcr.io/<your-username>/vib:latest
+docker run -d -p 8080:8080 -v ~/.aws:/root/.aws:ro ghcr.io/santhoshrajvtranscloud/vib:latest
 ```
 
 ### Option 3: Build from Source
 ```bash
 # Prerequisites: Go 1.23+, Node.js 20+, Packer CLI
-git clone https://github.com/<your-username>/vib.git
+git clone https://github.com/santhoshrajvtranscloud/vib.git
 cd vib
 
 # Build frontend and compile standalone binary
