@@ -3,7 +3,6 @@ import {
   Layers,
   Database,
   ShieldCheck,
-  RefreshCw,
 } from 'lucide-react'
 import { Header } from './components/Header'
 import { VisualBuilder } from './components/VisualBuilder'
@@ -50,9 +49,19 @@ export function App() {
   const [isPreflighting, setIsPreflighting] = useState(false)
   const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(false)
 
-  // Recent Builds State
-  const [recentBuilds, setRecentBuilds] = useState<BuildStatusSummary[]>([])
-  const [recentBuildsLoading, setRecentBuildsLoading] = useState(false)
+  // Adjustable Terminal and HCL Code Height
+  const [terminalHeight, setTerminalHeight] = useState<number>(() => {
+    const saved = localStorage.getItem('vib_terminal_height')
+    if (saved) {
+      const parsed = parseInt(saved, 10)
+      if (!isNaN(parsed) && parsed >= 100 && parsed <= 900) {
+        return parsed
+      }
+    }
+    return 260
+  })
+  const [isDragging, setIsDragging] = useState(false)
+  const rightWorkspaceRef = useRef<HTMLDivElement>(null)
 
   // AWS Integration States
   const [awsStatus, setAwsStatus] = useState<AWSIdentityInfo | null>(null)
@@ -71,21 +80,42 @@ export function App() {
   const activeEventSourceRef = useRef<EventSource | null>(null)
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Fetch recent builds list
-  const fetchRecentBuilds = useCallback(async () => {
-    try {
-      setRecentBuildsLoading(true)
-      const res = await apiFetch('/api/builds')
-      if (res.ok) {
-        const data = await res.json()
-        setRecentBuilds(data.builds || [])
-      }
-    } catch (err) {
-      console.warn('Failed to fetch recent builds:', err)
-    } finally {
-      setRecentBuildsLoading(false)
+  // Drag resizing for terminal & HCL sections
+  const handleSplitterMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  useEffect(() => {
+    if (!isDragging) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!rightWorkspaceRef.current) return
+      const rect = rightWorkspaceRef.current.getBoundingClientRect()
+      const newHeight = rect.bottom - e.clientY
+      const maxHeight = Math.max(160, rect.height - 160)
+      const clampedHeight = Math.min(Math.max(newHeight, 100), maxHeight)
+      setTerminalHeight(clampedHeight)
     }
-  }, [])
+
+    const handleMouseUp = () => {
+      setIsDragging(false)
+      localStorage.setItem('vib_terminal_height', terminalHeight.toString())
+    }
+
+    document.body.style.cursor = 'row-resize'
+    document.body.style.userSelect = 'none'
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDragging, terminalHeight])
 
   // Connect to SSE stream
   const connectSSE = useCallback((buildId: string) => {
@@ -109,7 +139,6 @@ export function App() {
       try {
         const statusSummary: BuildStatusSummary = JSON.parse(event.data)
         setCurrentBuild(statusSummary)
-        fetchRecentBuilds()
         es.close()
       } catch (err) {
         console.error('Failed to parse SSE status event:', err)
@@ -119,16 +148,7 @@ export function App() {
     es.onerror = () => {
       es.close()
     }
-  }, [fetchRecentBuilds])
-
-  // Select build from sidebar
-  const handleSelectBuild = (b: BuildStatusSummary) => {
-    setCurrentBuild(b)
-    setLogs([])
-    connectSSE(b.build_id)
-    setIsTerminalCollapsed(false)
-    setActiveTab('builder')
-  }
+  }, [])
 
   // 1. Fetch Health, Catalogue, and AWS Status on Mount
   const fetchAWSStatus = useCallback(async () => {
@@ -173,14 +193,13 @@ export function App() {
       }
     }
 
-    // Check if any build is currently running and reconnect SSE stream
+    // Check if an in-flight build is currently running and reconnect SSE stream
     const checkRunningBuilds = async () => {
       try {
         const res = await apiFetch('/api/builds')
         if (res.ok) {
           const data = await res.json()
           const builds: BuildStatusSummary[] = data.builds || []
-          setRecentBuilds(builds)
           const running = builds.find(
             (b) => b.status === 'running' || b.status === 'pending'
           )
@@ -494,7 +513,6 @@ export function App() {
       }
       setCurrentBuild(newBuild)
       connectSSE(data.build_id)
-      fetchRecentBuilds()
     } catch (err) {
       setLogs((prev) => [
         ...prev,
@@ -624,8 +642,8 @@ export function App() {
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar Navigation */}
         <aside className="w-56 shrink-0 bg-white border-r border-zinc-200 flex flex-col justify-between select-none">
-          {/* Top: App Navigation & Recent Builds */}
-          <div className="p-3 space-y-4 overflow-y-auto">
+          {/* Top: App Navigation */}
+          <div className="p-3 space-y-4">
             <div>
               <div className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">
                 Services
@@ -674,67 +692,6 @@ export function App() {
                 </button>
               </nav>
             </div>
-
-            {/* Integrated Recent Builds Live Status List */}
-            <div className="pt-2 border-t border-zinc-200">
-              <div className="flex items-center justify-between px-2 pb-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">
-                  Recent Builds
-                </span>
-                <button
-                  type="button"
-                  onClick={fetchRecentBuilds}
-                  className="text-zinc-400 hover:text-zinc-900 transition-colors"
-                  title="Refresh recent builds list"
-                >
-                  <RefreshCw className={`w-3 h-3 ${recentBuildsLoading ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
-
-              <div className="space-y-1.5 max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
-                {recentBuilds.length === 0 ? (
-                  <div className="px-2 py-4 text-center text-[11px] text-zinc-400">
-                    No builds recorded yet.
-                  </div>
-                ) : (
-                  recentBuilds.slice(0, 10).map((b) => {
-                    const isSelected = currentBuild?.build_id === b.build_id
-                    return (
-                      <div
-                        key={b.build_id}
-                        onClick={() => handleSelectBuild(b)}
-                        className={`w-full text-left p-2 rounded-md border transition-all cursor-pointer ${
-                          isSelected
-                            ? 'border-zinc-950 bg-zinc-50'
-                            : 'border-zinc-200 hover:border-zinc-300 bg-white hover:bg-zinc-50'
-                        }`}
-                        title={`Click to view build ${b.build_id}`}
-                      >
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="font-medium text-zinc-950 text-[11px] truncate block">
-                            {b.ami_name || b.build_id.slice(0, 14)}
-                          </span>
-                          {b.status === 'running' && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-950 animate-ping shrink-0" />
-                          )}
-                        </div>
-
-                        <div className="flex items-center justify-between mt-1 text-[10px] font-mono text-zinc-500">
-                          <span className="uppercase text-[9px] font-sans px-1 py-0.5 rounded bg-zinc-100 text-zinc-700">
-                            {b.status}
-                          </span>
-                          {b.ami_id ? (
-                            <span className="text-zinc-900 font-semibold">{b.ami_id.slice(0, 10)}...</span>
-                          ) : (
-                            <span>{b.region || config.region}</span>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })
-                )}
-              </div>
-            </div>
           </div>
 
           {/* Sidebar Footer */}
@@ -770,10 +727,17 @@ export function App() {
                 />
               </div>
 
-              {/* Right Panel: Split into Monaco Editor (Top) & Live Logs Terminal (Bottom) */}
-              <div className="flex-1 flex flex-col h-full overflow-hidden bg-white">
+              {/* Right Panel: Split into Monaco Editor (Top), Draggable Splitter, & Live Logs Terminal (Bottom) */}
+              <div
+                ref={rightWorkspaceRef}
+                className="flex-1 flex flex-col h-full overflow-hidden bg-white relative"
+              >
                 {/* Top Half: Monaco HCL Editor */}
-                <div className="flex-1 min-h-[260px] overflow-hidden bg-white">
+                <div
+                  className={`flex-1 min-h-[160px] overflow-hidden bg-white ${
+                    isDragging ? 'pointer-events-none select-none' : ''
+                  }`}
+                >
                   <HclEditor
                     hclCode={hclCode}
                     onChange={handleEditorChange}
@@ -793,11 +757,27 @@ export function App() {
                   />
                 </div>
 
-                {/* Bottom Half: Live Terminal Logs (Collapsible) */}
+                {/* Draggable Resizer Splitter Bar */}
+                {!isTerminalCollapsed && (
+                  <div
+                    onMouseDown={handleSplitterMouseDown}
+                    onDoubleClick={() => {
+                      setTerminalHeight(260)
+                      localStorage.setItem('vib_terminal_height', '260')
+                    }}
+                    className={`h-2 shrink-0 w-full bg-zinc-100 hover:bg-zinc-200 active:bg-zinc-300 border-y border-zinc-200 cursor-row-resize flex items-center justify-center transition-colors select-none group z-10 ${
+                      isDragging ? 'bg-zinc-300' : ''
+                    }`}
+                    title="Drag to resize Terminal and HCL Code sections (Double-click to reset)"
+                  >
+                    <div className="w-8 h-1 rounded-full bg-zinc-300 group-hover:bg-zinc-500 transition-colors" />
+                  </div>
+                )}
+
+                {/* Bottom Half: Live Terminal Logs (Adjustable Height or Collapsed) */}
                 <div
-                  className={`${
-                    isTerminalCollapsed ? 'h-10' : 'h-[320px]'
-                  } shrink-0 overflow-hidden bg-zinc-950 border-t border-zinc-200 transition-all duration-200`}
+                  style={{ height: isTerminalCollapsed ? 40 : terminalHeight }}
+                  className="shrink-0 overflow-hidden bg-zinc-950 border-t border-zinc-200"
                 >
                   <TerminalLogs
                     logs={logs}
@@ -835,4 +815,5 @@ export function App() {
 }
 
 export default App
+
 

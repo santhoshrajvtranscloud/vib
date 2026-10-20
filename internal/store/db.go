@@ -124,8 +124,13 @@ func (s *DB) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_builds_created_at ON builds(created_at DESC);
 	CREATE INDEX IF NOT EXISTS idx_builds_ami_id ON builds(ami_id);
 	`
-	_, err := s.db.Exec(query)
-	return err
+	if _, err := s.db.Exec(query); err != nil {
+		return err
+	}
+
+	// Reconcile any in-flight builds left from a previous server session as failed
+	_, _ = s.db.Exec(`UPDATE builds SET status = 'failed', error_message = 'Build interrupted by server shutdown' WHERE status IN ('running', 'pending')`)
+	return nil
 }
 
 // Close closes the database connection.

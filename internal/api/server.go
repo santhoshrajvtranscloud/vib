@@ -1395,15 +1395,23 @@ func (bm *BuildManager) ListBuilds() []BuildStatusSummary {
 				if seen[dbB.BuildID] {
 					continue
 				}
+				status := dbB.Status
+				errMsg := dbB.ErrorMessage
+				if status == "running" || status == "pending" {
+					status = "failed"
+					if errMsg == "" {
+						errMsg = "Build was interrupted by server restart"
+					}
+				}
 				list = append(list, BuildStatusSummary{
 					BuildID:    dbB.BuildID,
 					AMIName:    dbB.AMIName,
 					Region:     dbB.Region,
-					Status:     dbB.Status,
+					Status:     status,
 					AMIID:      dbB.AMIID,
 					DurationMs: int64(dbB.DurationSeconds) * 1000,
 					CreatedAt:  dbB.CreatedAt,
-					Error:      dbB.ErrorMessage,
+					Error:      errMsg,
 				})
 			}
 		}
