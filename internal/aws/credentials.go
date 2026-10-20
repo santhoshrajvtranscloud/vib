@@ -9,12 +9,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -153,13 +156,24 @@ func decrypt(key, ciphertext []byte) ([]byte, error) {
 	return gcm.Open(nil, nonce, cipherData, nil)
 }
 
+// defaultHTTPClient returns an HTTP client configured with a 15-second timeout.
+func defaultHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: 15 * time.Second,
+	}
+}
+
 // SaveCustomCredentials encrypts and stores the credentials, then tests them via STS.
 func (cm *CredentialManager) SaveCustomCredentials(ctx context.Context, creds CustomCredentials, testRegion string) (*IdentityInfo, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	if strings.TrimSpace(creds.AccessKeyID) == "" {
+	keyID := strings.TrimSpace(creds.AccessKeyID)
+	if keyID == "" {
 		return nil, errors.New("access_key_id is required")
+	}
+	if !strings.HasPrefix(keyID, "AKIA") && !strings.HasPrefix(keyID, "ASIA") {
+		return nil, errors.New("invalid AWS access key ID format: must begin with AKIA (standard) or ASIA (temporary STS)")
 	}
 	if strings.TrimSpace(creds.SecretAccessKey) == "" {
 		return nil, errors.New("secret_access_key is required")
@@ -169,11 +183,17 @@ func (cm *CredentialManager) SaveCustomCredentials(ctx context.Context, creds Cu
 		testRegion = "ap-south-1"
 	}
 
-	// Test credentials before saving
+	// Test credentials before saving with hardened timeout and adaptive standard retries
 	testCfg, err := awsconfig.LoadDefaultConfig(ctx,
 		awsconfig.WithRegion(testRegion),
+		awsconfig.WithHTTPClient(defaultHTTPClient()),
+		awsconfig.WithRetryer(func() aws.Retryer {
+			return retry.NewStandard(func(o *retry.StandardOptions) {
+				o.MaxAttempts = 3
+			})
+		}),
 		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			creds.AccessKeyID,
+			keyID,
 			creds.SecretAccessKey,
 			creds.SessionToken,
 		)),
@@ -193,6 +213,11 @@ func (cm *CredentialManager) SaveCustomCredentials(ctx context.Context, creds Cu
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		for i := range payload {
+			payload[i] = 0
+		}
+	}()
 
 	key, err := cm.getOrCreateKey()
 	if err != nil {
@@ -214,7 +239,7 @@ func (cm *CredentialManager) SaveCustomCredentials(ctx context.Context, creds Cu
 		ARN:             aws.ToString(identity.Arn),
 		UserID:          aws.ToString(identity.UserId),
 		Source:          "encrypted_store",
-		MaskedAccessKey: MaskAccessKey(creds.AccessKeyID),
+		MaskedAccessKey: MaskAccessKey(keyID),
 		Region:          testRegion,
 	}, nil
 }
@@ -254,6 +279,11 @@ func (cm *CredentialManager) GetStoredCredentials() (*CustomCredentials, error) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt credentials: %w", err)
 	}
+	defer func() {
+		for i := range plaintext {
+			plaintext[i] = 0
+		}
+	}()
 
 	var creds CustomCredentials
 	if err := json.Unmarshal(plaintext, &creds); err != nil {
@@ -284,19 +314,25 @@ func (cm *CredentialManager) GetAWSConfig(ctx context.Context, region string) (a
 		return aws.Config{}, err
 	}
 
-	if creds != nil {
-		return awsconfig.LoadDefaultConfig(ctx,
-			awsconfig.WithRegion(region),
-			awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-				creds.AccessKeyID,
-				creds.SecretAccessKey,
-				creds.SessionToken,
-			)),
-		)
+	opts := []func(*awsconfig.LoadOptions) error{
+		awsconfig.WithRegion(region),
+		awsconfig.WithHTTPClient(defaultHTTPClient()),
+		awsconfig.WithRetryer(func() aws.Retryer {
+			return retry.NewStandard(func(o *retry.StandardOptions) {
+				o.MaxAttempts = 3
+			})
+		}),
 	}
 
-	// Fallback to local default credential chain
-	return awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+	if creds != nil {
+		opts = append(opts, awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+			creds.AccessKeyID,
+			creds.SecretAccessKey,
+			creds.SessionToken,
+		)))
+	}
+
+	return awsconfig.LoadDefaultConfig(ctx, opts...)
 }
 
 // VerifyIdentity checks connectivity with AWS STS GetCallerIdentity.

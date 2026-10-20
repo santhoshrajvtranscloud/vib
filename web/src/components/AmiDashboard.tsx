@@ -16,6 +16,7 @@ import {
   Package,
 } from 'lucide-react'
 import type { BuildConfig, VIBImageItem, ImageConfigResponse } from '../types'
+import { apiFetch } from '../api'
 
 interface AmiDashboardProps {
   region: string
@@ -46,7 +47,7 @@ export const AmiDashboard: React.FC<AmiDashboardProps> = ({
     try {
       setLoading(true)
       setError(null)
-      const res = await fetch(`/api/images?region=${region}`)
+      const res = await apiFetch(`/api/images?region=${region}`)
       if (!res.ok) throw new Error('Failed to load AMIs from backend')
       const data = await res.json()
       setImages(data.images || [])
@@ -72,7 +73,7 @@ export const AmiDashboard: React.FC<AmiDashboardProps> = ({
     try {
       setConfigLoading(true)
       setConfigModalOpen(true)
-      const res = await fetch(`/api/images/${idToLookup}/config`)
+      const res = await apiFetch(`/api/images/${idToLookup}/config`)
       if (!res.ok) throw new Error('Could not retrieve build configuration')
       const data: ImageConfigResponse = await res.json()
       setSelectedConfig(data)
@@ -92,7 +93,7 @@ export const AmiDashboard: React.FC<AmiDashboardProps> = ({
 
     try {
       setIsDeleting(true)
-      const res = await fetch(`/api/images/${idToDelete}?region=${deleteTarget.region || region}`, {
+      const res = await apiFetch(`/api/images/${idToDelete}?region=${deleteTarget.region || region}`, {
         method: 'DELETE',
       })
       const data = await res.json()

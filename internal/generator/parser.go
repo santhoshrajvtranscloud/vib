@@ -279,3 +279,92 @@ func evalStringOrLiteral(expr hclsyntax.Expression, fileBytes []byte) string {
 
 	return ""
 }
+
+// ValidateHCLSecurity performs an AST security audit on Packer HCL.
+// It verifies that:
+// 1. No local provisioners (e.g. shell-local, local-exec) are used to run arbitrary host commands.
+// 2. All required plugins originate exclusively from trusted namespaces (github.com/hashicorp/*).
+func ValidateHCLSecurity(hclBytes []byte) error {
+	if len(strings.TrimSpace(string(hclBytes))) == 0 {
+		return errors.New("empty HCL content")
+	}
+
+	parser := hclparse.NewParser()
+	file, diags := parser.ParseHCL(hclBytes, "security-check.pkr.hcl")
+	if diags.HasErrors() {
+		return fmt.Errorf("HCL syntax error: %s", diags.Error())
+	}
+
+	syntaxBody, ok := file.Body.(*hclsyntax.Body)
+	if !ok {
+		return errors.New("failed to inspect HCL syntax tree")
+	}
+
+	return inspectBlocksSecurity(syntaxBody.Blocks, file.Bytes)
+}
+
+func inspectBlocksSecurity(blocks hclsyntax.Blocks, fileBytes []byte) error {
+	for _, block := range blocks {
+		// 1. Check provisioners
+		if block.Type == "provisioner" {
+			for _, label := range block.Labels {
+				lower := strings.ToLower(label)
+				if lower == "shell-local" || lower == "local-exec" || strings.Contains(lower, "local") {
+					return fmt.Errorf("security violation: local provisioner %q is prohibited; execution is restricted to remote instances", label)
+				}
+			}
+		}
+
+		// 2. Check required_plugins inside packer block
+		if block.Type == "packer" {
+			for _, child := range block.Body.Blocks {
+				if child.Type == "required_plugins" {
+					if err := inspectRequiredPluginsSecurity(child.Body, fileBytes); err != nil {
+						return err
+					}
+				}
+			}
+		}
+
+		// Recursively inspect any nested child blocks
+		if block.Body != nil && len(block.Body.Blocks) > 0 {
+			if err := inspectBlocksSecurity(block.Body.Blocks, fileBytes); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func inspectRequiredPluginsSecurity(body *hclsyntax.Body, fileBytes []byte) error {
+	if body == nil {
+		return nil
+	}
+
+	// Case A: Plugin configured as attributes: amazon = { source = "...", version = "..." }
+	for _, attr := range body.Attributes {
+		if objExpr, ok := attr.Expr.(*hclsyntax.ObjectConsExpr); ok {
+			for _, item := range objExpr.Items {
+				key := evalStringOrLiteral(item.KeyExpr, fileBytes)
+				if key == "source" {
+					source := evalStringOrLiteral(item.ValueExpr, fileBytes)
+					if source != "" && !strings.HasPrefix(source, "github.com/hashicorp/") {
+						return fmt.Errorf("security violation: untrusted plugin source %q; only github.com/hashicorp/* plugins are permitted", source)
+					}
+				}
+			}
+		}
+	}
+
+	// Case B: Plugin configured as nested blocks: plugin "amazon" { source = "..." }
+	for _, block := range body.Blocks {
+		if srcAttr, exists := block.Body.Attributes["source"]; exists {
+			source := evalStringOrLiteral(srcAttr.Expr, fileBytes)
+			if source != "" && !strings.HasPrefix(source, "github.com/hashicorp/") {
+				return fmt.Errorf("security violation: untrusted plugin source %q; only github.com/hashicorp/* plugins are permitted", source)
+			}
+		}
+	}
+
+	return nil
+}

@@ -50,8 +50,10 @@ func main() {
 
 		apiServer := api.NewServer(runner)
 		httpServer := &http.Server{
-			Addr:    listenAddr,
-			Handler: apiServer.Routes(),
+			Addr:              listenAddr,
+			Handler:           apiServer.Routes(),
+			ReadHeaderTimeout: 10 * time.Second,
+			IdleTimeout:       120 * time.Second,
 		}
 
 		sigChan := make(chan os.Signal, 1)

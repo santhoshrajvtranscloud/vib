@@ -71,11 +71,21 @@ func NewDB(dbPath ...string) (*DB, error) {
 		return nil, fmt.Errorf("failed to open sqlite database at %s: %w", path, err)
 	}
 
-	// Recommended connection pooling for SQLite
-	if path == ":memory:" {
-		db.SetMaxOpenConns(1)
-	} else {
-		db.SetMaxOpenConns(10)
+	// Configure single open connection to eliminate SQLITE_BUSY lock collisions
+	db.SetMaxOpenConns(1)
+
+	// Execute WAL mode and concurrency hardening PRAGMAs
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL;",
+		"PRAGMA synchronous=NORMAL;",
+		"PRAGMA busy_timeout=5000;",
+		"PRAGMA foreign_keys=ON;",
+	}
+	for _, pragma := range pragmas {
+		if _, err := db.Exec(pragma); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("failed to execute %s: %w", pragma, err)
+		}
 	}
 
 	store := &DB{

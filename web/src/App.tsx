@@ -5,6 +5,7 @@ import { HclEditor } from './components/HclEditor'
 import { TerminalLogs } from './components/TerminalLogs'
 import { AWSModal } from './components/AWSModal'
 import { AmiDashboard } from './components/AmiDashboard'
+import { apiFetch } from './api'
 import type {
   BuildConfig,
   CataloguePackage,
@@ -57,10 +58,43 @@ export function App() {
   const activeEventSourceRef = useRef<EventSource | null>(null)
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Connect to SSE stream
+  const connectSSE = useCallback((buildId: string) => {
+    if (activeEventSourceRef.current) {
+      activeEventSourceRef.current.close()
+    }
+
+    const es = new EventSource(`/api/builds/${buildId}/stream`)
+    activeEventSourceRef.current = es
+
+    es.addEventListener('log', (event: MessageEvent) => {
+      try {
+        const entry: LogEntry = JSON.parse(event.data)
+        setLogs((prev) => [...prev, entry])
+      } catch (err) {
+        console.error('Failed to parse SSE log event:', err)
+      }
+    })
+
+    es.addEventListener('status', (event: MessageEvent) => {
+      try {
+        const statusSummary: BuildStatusSummary = JSON.parse(event.data)
+        setCurrentBuild(statusSummary)
+        es.close()
+      } catch (err) {
+        console.error('Failed to parse SSE status event:', err)
+      }
+    })
+
+    es.onerror = () => {
+      es.close()
+    }
+  }, [])
+
   // 1. Fetch Health, Catalogue, and AWS Status on Mount
   const fetchAWSStatus = useCallback(async () => {
     try {
-      const res = await fetch(`/api/aws/status?region=${config.region}`)
+      const res = await apiFetch(`/api/aws/status?region=${config.region}`)
       if (res.ok) {
         const data: AWSIdentityInfo = await res.json()
         setAwsStatus(data)
@@ -74,7 +108,7 @@ export function App() {
     const fetchHealth = async () => {
       try {
         setHealthLoading(true)
-        const res = await fetch('/api/health')
+        const res = await apiFetch('/api/health')
         if (!res.ok) throw new Error('Health check failed')
         const data = await res.json()
         setHealth(data)
@@ -89,7 +123,7 @@ export function App() {
     const fetchCatalogue = async () => {
       try {
         setCatalogueLoading(true)
-        const res = await fetch('/api/catalogue')
+        const res = await apiFetch('/api/catalogue')
         if (!res.ok) throw new Error('Failed to fetch catalogue')
         const data = await res.json()
         setCatalogue(data.packages || [])
@@ -100,19 +134,45 @@ export function App() {
       }
     }
 
+    // Check if any build is currently running and reconnect SSE stream
+    const checkRunningBuilds = async () => {
+      try {
+        const res = await apiFetch('/api/builds')
+        if (res.ok) {
+          const data = await res.json()
+          const builds: BuildStatusSummary[] = data.builds || []
+          const running = builds.find(
+            (b) => b.status === 'running' || b.status === 'pending'
+          )
+          if (running) {
+            setCurrentBuild(running)
+            connectSSE(running.build_id)
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to check running builds on load:', err)
+      }
+    }
+
     fetchHealth()
     fetchCatalogue()
     fetchAWSStatus()
+    checkRunningBuilds()
 
     const healthInterval = setInterval(fetchHealth, 30000)
-    return () => clearInterval(healthInterval)
-  }, [fetchAWSStatus])
+    return () => {
+      clearInterval(healthInterval)
+      if (activeEventSourceRef.current) {
+        activeEventSourceRef.current.close()
+      }
+    }
+  }, [fetchAWSStatus, connectSSE])
 
   // 2. Fetch Official Base AMIs when Region or Architecture changes
   const fetchBaseAMIs = useCallback(async (region: string, arch: string) => {
     try {
       setBaseAMIsLoading(true)
-      const res = await fetch(`/api/aws/base-amis?region=${region}&arch=${arch}`)
+      const res = await apiFetch(`/api/aws/base-amis?region=${region}&arch=${arch}`)
       if (!res.ok) throw new Error('Failed to fetch base AMIs')
       const data: BaseAMIResponse = await res.json()
       setBaseAMIs(data.images || [])
@@ -131,7 +191,7 @@ export function App() {
   // 3. Auto-generate HCL on form changes (Debounced)
   const generateHCL = useCallback(async (cfgToUse: BuildConfig) => {
     try {
-      const res = await fetch('/api/hcl/generate', {
+      const res = await apiFetch('/api/hcl/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cfgToUse),
@@ -193,7 +253,7 @@ export function App() {
     setIsSyncingToForm(true)
     setSyncNotification(null)
     try {
-      const res = await fetch('/api/hcl/parse', {
+      const res = await apiFetch('/api/hcl/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hcl: hclCode }),
@@ -234,7 +294,7 @@ export function App() {
     setLogs((prev) => [...prev, startMsg])
 
     try {
-      const res = await fetch('/api/hcl/validate', {
+      const res = await apiFetch('/api/hcl/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hcl: hclCode }),
@@ -278,40 +338,7 @@ export function App() {
     }
   }
 
-  // 7. Connect to SSE stream
-  const connectSSE = (buildId: string) => {
-    if (activeEventSourceRef.current) {
-      activeEventSourceRef.current.close()
-    }
-
-    const es = new EventSource(`/api/builds/${buildId}/stream`)
-    activeEventSourceRef.current = es
-
-    es.addEventListener('log', (event: MessageEvent) => {
-      try {
-        const entry: LogEntry = JSON.parse(event.data)
-        setLogs((prev) => [...prev, entry])
-      } catch (err) {
-        console.error('Failed to parse SSE log event:', err)
-      }
-    })
-
-    es.addEventListener('status', (event: MessageEvent) => {
-      try {
-        const statusSummary: BuildStatusSummary = JSON.parse(event.data)
-        setCurrentBuild(statusSummary)
-        es.close()
-      } catch (err) {
-        console.error('Failed to parse SSE status event:', err)
-      }
-    })
-
-    es.onerror = () => {
-      es.close()
-    }
-  }
-
-  // 8. Start Build
+  // 7. Start Build
   const handleBuild = async () => {
     setLogs([
       {
@@ -324,7 +351,7 @@ export function App() {
     const payload = isManualMode ? { hcl: hclCode } : { config }
 
     try {
-      const res = await fetch('/api/builds', {
+      const res = await apiFetch('/api/builds', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -364,7 +391,7 @@ export function App() {
     }
   }
 
-  // 9. Cancel running build
+  // 8. Cancel running build
   const handleCancel = async () => {
     if (!currentBuild || !currentBuild.build_id) return
 
@@ -378,7 +405,7 @@ export function App() {
     ])
 
     try {
-      const res = await fetch(`/api/builds/${currentBuild.build_id}/cancel`, {
+      const res = await apiFetch(`/api/builds/${currentBuild.build_id}/cancel`, {
         method: 'POST',
       })
       if (!res.ok) {
@@ -399,13 +426,13 @@ export function App() {
     }
   }
 
-  // 10. Save custom AWS Credentials
+  // 9. Save custom AWS Credentials
   const handleSaveAWSCredentials = async (
     accessKey: string,
     secretKey: string,
     sessionToken?: string
   ) => {
-    const res = await fetch('/api/aws/credentials', {
+    const res = await apiFetch('/api/aws/credentials', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -427,9 +454,9 @@ export function App() {
     fetchBaseAMIs(config.region, architecture)
   }
 
-  // 11. Clear custom AWS Credentials
+  // 10. Clear custom AWS Credentials
   const handleClearAWSCredentials = async () => {
-    const res = await fetch('/api/aws/credentials', {
+    const res = await apiFetch('/api/aws/credentials', {
       method: 'DELETE',
     })
     if (!res.ok) {
@@ -440,7 +467,7 @@ export function App() {
     fetchBaseAMIs(config.region, architecture)
   }
 
-  // 12. Load configuration from AMI History into Visual Builder
+  // 11. Load configuration from AMI History into Visual Builder
   const handleLoadConfigToBuilder = (loadedConfig: BuildConfig, loadedHcl?: string) => {
     setConfig(loadedConfig)
     if (loadedHcl) {

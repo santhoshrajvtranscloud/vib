@@ -133,9 +133,14 @@ func isAllowedOrigin(origin string) bool {
 	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
-// corsMiddleware provides CORS & CSRF protection for localhost and local Vite development.
+// corsMiddleware provides CORS, Security Headers, and CSRF protection for localhost and local Vite development.
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 1. Enforce strict security headers on all responses
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+
 		origin := r.Header.Get("Origin")
 
 		if origin != "" {
@@ -156,6 +161,19 @@ func corsMiddleware(next http.Handler) http.Handler {
 			// Same-origin or non-browser client: allow localhost API access
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-VIB-CSRF-Protection, Accept")
+		}
+
+		// 2. Enforce CSRF protection on state-changing methods (POST, DELETE, PUT)
+		// Requires an allowed localhost Origin match OR the custom X-VIB-CSRF-Protection: 1 header.
+		isStateChanging := r.Method == http.MethodPost || r.Method == http.MethodDelete || r.Method == http.MethodPut
+		if isStateChanging {
+			hasAllowedOrigin := origin != "" && isAllowedOrigin(origin)
+			hasCSRFHeader := r.Header.Get("X-VIB-CSRF-Protection") == "1"
+
+			if !hasAllowedOrigin && !hasCSRFHeader {
+				http.Error(w, "Forbidden: Missing CSRF protection header (X-VIB-CSRF-Protection: 1 required)", http.StatusForbidden)
+				return
+			}
 		}
 
 		if r.Method == http.MethodOptions {
@@ -234,8 +252,14 @@ func (s *Server) handleCatalogue(w http.ResponseWriter, r *http.Request) {
 
 // handleHCLGenerate validates incoming BuildConfig JSON and returns { "hcl": "..." }.
 func (s *Server) handleHCLGenerate(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "Request payload exceeds 1MB limit")
+			return
+		}
 		writeError(w, http.StatusBadRequest, "Failed to read request body")
 		return
 	}
@@ -293,8 +317,14 @@ type HCLValidateResponse struct {
 
 // handleHCLValidate accepts { "hcl": "..." }, prepares a temp workspace, runs Init + Validate, and returns result.
 func (s *Server) handleHCLValidate(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req HCLValidateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "Request payload exceeds 1MB limit")
+			return
+		}
 		writeError(w, http.StatusBadRequest, "Invalid JSON payload")
 		return
 	}
@@ -302,6 +332,12 @@ func (s *Server) handleHCLValidate(w http.ResponseWriter, r *http.Request) {
 
 	if strings.TrimSpace(req.HCL) == "" {
 		writeError(w, http.StatusBadRequest, "Attribute 'hcl' is required")
+		return
+	}
+
+	// AST Security Audit Gate
+	if err := generator.ValidateHCLSecurity([]byte(req.HCL)); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("HCL security audit rejected: %v", err))
 		return
 	}
 
@@ -386,8 +422,14 @@ type HCLParseResponse struct {
 
 // handleHCLParse accepts HCL text, parses it via generator.ParseHCL, and returns the reconstructed BuildConfig.
 func (s *Server) handleHCLParse(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req HCLParseRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "Request payload exceeds 1MB limit")
+			return
+		}
 		writeError(w, http.StatusBadRequest, "Invalid JSON payload")
 		return
 	}
@@ -418,8 +460,14 @@ type CreateBuildRequest struct {
 
 // handleCreateBuild accepts BuildConfig JSON or raw HCL, creates a job, starts async execution.
 func (s *Server) handleCreateBuild(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "Request payload exceeds 1MB limit")
+			return
+		}
 		writeError(w, http.StatusBadRequest, "Failed to read request body")
 		return
 	}
@@ -475,6 +523,12 @@ func (s *Server) handleCreateBuild(w http.ResponseWriter, r *http.Request) {
 	}
 	if buildID == "" {
 		buildID = "vib-" + newUUID()
+	}
+
+	// AST Security Gate: Audit HCL before launching background build
+	if err := generator.ValidateHCLSecurity([]byte(hclContent)); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("HCL security audit rejected: %v", err))
+		return
 	}
 
 	build, err := s.buildManager.CreateAndStartBuild(buildID, hclContent, buildConfig)
@@ -556,10 +610,17 @@ func (s *Server) handleStreamBuild(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. Stream live logs until finished or disconnected
+	heartbeatTicker := time.NewTicker(15 * time.Second)
+	defer heartbeatTicker.Stop()
+
 	for {
 		select {
 		case <-r.Context().Done():
 			return
+		case <-heartbeatTicker.C:
+			// SSE comment line for keep-alive to prevent browser or proxy timeouts
+			fmt.Fprintf(w, ": heartbeat\n\n")
+			flusher.Flush()
 		case entry, ok := <-logChan:
 			if !ok {
 				// Channel closed, build concluded
@@ -634,8 +695,14 @@ type SaveCredentialsRequest struct {
 
 // handleSaveAWSCredentials validates credentials via STS GetCallerIdentity, saves encrypted via AES-256-GCM, and returns identity.
 func (s *Server) handleSaveAWSCredentials(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req SaveCredentialsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "Request payload exceeds 1MB limit")
+			return
+		}
 		writeError(w, http.StatusBadRequest, "Invalid JSON payload")
 		return
 	}

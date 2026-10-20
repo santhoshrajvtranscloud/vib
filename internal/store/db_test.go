@@ -143,3 +143,62 @@ func TestFileBasedDB(t *testing.T) {
 		t.Errorf("expected region eu-west-1, got %s", fetched.Region)
 	}
 }
+
+func TestWALConcurrency(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "concurrency.db")
+
+	db, err := NewDB(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create db: %v", err)
+	}
+	defer db.Close()
+
+	// Initial record
+	if err := db.CreateBuild(&BuildRecord{
+		BuildID: "concurrency-base",
+		AMIName: "base-ami",
+		Region:  "us-east-1",
+		Status:  "running",
+	}); err != nil {
+		t.Fatalf("failed to insert base: %v", err)
+	}
+
+	const goroutines = 20
+	errChan := make(chan error, goroutines*2)
+
+	// Launch concurrent writers
+	for i := 0; i < goroutines; i++ {
+		go func(idx int) {
+			rec := &BuildRecord{
+				BuildID: "concurrent-build-" + string(rune('A'+idx)),
+				AMIName: "ami-" + string(rune('A'+idx)),
+				Region:  "us-east-1",
+				Status:  "running",
+			}
+			if err := db.CreateBuild(rec); err != nil {
+				errChan <- err
+				return
+			}
+			if err := db.UpdateBuildStatus(rec.BuildID, "success", "ami-idx-"+string(rune('A'+idx)), "logs", "", 10); err != nil {
+				errChan <- err
+				return
+			}
+			errChan <- nil
+		}(i)
+	}
+
+	// Launch concurrent readers
+	for i := 0; i < goroutines; i++ {
+		go func() {
+			_, err := db.ListBuilds()
+			errChan <- err
+		}()
+	}
+
+	for i := 0; i < goroutines*2; i++ {
+		if err := <-errChan; err != nil {
+			t.Fatalf("concurrent SQLite operation failed with error: %v", err)
+		}
+	}
+}
