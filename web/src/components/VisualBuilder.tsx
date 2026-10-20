@@ -158,29 +158,29 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full bg-zinc-950 border-r border-zinc-800 overflow-y-auto">
+    <div className="flex flex-col h-full bg-zinc-50 overflow-y-auto">
       {/* Panel Title & Manual Edit Alert */}
-      <div className="p-4 border-b border-zinc-800 bg-zinc-950 sticky top-0 z-10">
+      <div className="p-4 border-b border-zinc-200 bg-zinc-50 sticky top-0 z-10">
         <div className="flex items-center justify-between">
-          <h2 className="text-xs font-bold text-white tracking-wider uppercase">
+          <h2 className="text-xs font-semibold text-zinc-950 tracking-wider uppercase">
             Builder Configuration
           </h2>
           {isManualMode ? (
             <button
               onClick={onResetToForm}
-              className="text-xs border border-zinc-700 bg-zinc-900 text-zinc-300 hover:border-zinc-400 hover:text-white px-2.5 py-1 rounded-md transition-colors"
+              className="text-xs border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50 hover:border-zinc-400 px-2.5 py-1 rounded-md transition-colors shadow-2xs"
             >
               Reset to UI
             </button>
           ) : (
-            <span className="text-[11px] font-mono text-zinc-400 border border-zinc-800 bg-zinc-900 px-2 py-0.5 rounded-md">
+            <span className="text-[11px] font-mono text-zinc-600 border border-zinc-200 bg-white px-2 py-0.5 rounded-md shadow-2xs">
               Live Sync
             </span>
           )}
         </div>
         {isManualMode && (
-          <div className="mt-2.5 text-xs text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-md p-2.5 flex items-start gap-2">
-            <Info className="w-3.5 h-3.5 shrink-0 text-zinc-400 mt-0.5" />
+          <div className="mt-2.5 text-xs text-zinc-700 bg-white border border-zinc-200 rounded-md p-2.5 flex items-start gap-2 shadow-2xs">
+            <Info className="w-3.5 h-3.5 shrink-0 text-zinc-500 mt-0.5" />
             <span>
               Manual HCL editing active. Changes made in this form will not overwrite the editor until you click &quot;Reset to UI&quot;.
             </span>
@@ -191,40 +191,40 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
       <div className="p-4 space-y-6">
         {/* Section 1: Target AMI & Region */}
         <div className="space-y-4">
-          <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-            <Globe className="w-3.5 h-3.5 text-zinc-400" />
+          <h3 className="text-xs font-semibold text-zinc-950 uppercase tracking-wider flex items-center gap-1.5">
+            <Globe className="w-3.5 h-3.5 text-zinc-500" />
             Destination Specs
           </h3>
 
           {/* AMI Name */}
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">
-              Target AMI Name <span className="text-white">*</span>
+            <label className="block text-xs font-medium text-zinc-800 mb-1">
+              Target AMI Name <span className="text-zinc-950">*</span>
             </label>
             <input
               type="text"
               value={config.ami_name}
               onChange={(e) => updateField('ami_name', e.target.value)}
               placeholder="e.g. vib-ubuntu-nginx-app"
-              className="w-full bg-zinc-900 border border-zinc-800 text-white focus:border-white focus:ring-0 outline-none rounded-md px-3 py-2 text-xs font-mono placeholder:text-zinc-600 transition-colors"
+              className="w-full bg-white border border-zinc-300 text-zinc-900 focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950 outline-none rounded-md px-3 py-2 text-xs font-mono placeholder:text-zinc-400 transition-colors shadow-2xs"
             />
             <p className="mt-1 text-[11px] text-zinc-500">
-              VIB automatically appends <code className="text-zinc-400">-&#123;&#123;timestamp&#125;&#125;</code> to guarantee uniqueness in AWS.
+              VIB automatically appends <code className="text-zinc-700 font-mono">-&#123;&#123;timestamp&#125;&#125;</code> to guarantee uniqueness in AWS.
             </p>
           </div>
 
           {/* Region */}
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">
-              AWS Region <span className="text-white">*</span>
+            <label className="block text-xs font-medium text-zinc-800 mb-1">
+              AWS Region <span className="text-zinc-950">*</span>
             </label>
             <select
               value={config.region}
               onChange={(e) => updateField('region', e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 text-white focus:border-white focus:ring-0 outline-none rounded-md px-3 py-2 text-xs transition-colors"
+              className="w-full bg-white border border-zinc-300 text-zinc-900 focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950 outline-none rounded-md px-3 py-2 text-xs transition-colors shadow-2xs"
             >
               {REGION_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value} className="bg-zinc-900 text-white">
+                <option key={opt.value} value={opt.value} className="bg-white text-zinc-900">
                   {opt.label}
                 </option>
               ))}
@@ -233,17 +233,17 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
 
           {/* Instance Type */}
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1 flex items-center gap-1">
-              <Cpu className="w-3.5 h-3.5 text-zinc-400" />
-              Build Instance Type <span className="text-white">*</span>
+            <label className="block text-xs font-medium text-zinc-800 mb-1 flex items-center gap-1">
+              <Cpu className="w-3.5 h-3.5 text-zinc-500" />
+              Build Instance Type <span className="text-zinc-950">*</span>
             </label>
             <select
               value={config.instance_type}
               onChange={(e) => updateField('instance_type', e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 text-white focus:border-white focus:ring-0 outline-none rounded-md px-3 py-2 text-xs font-mono transition-colors"
+              className="w-full bg-white border border-zinc-300 text-zinc-900 focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950 outline-none rounded-md px-3 py-2 text-xs font-mono transition-colors shadow-2xs"
             >
               {INSTANCE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value} className="bg-zinc-900 text-white">
+                <option key={opt.value} value={opt.value} className="bg-white text-zinc-900">
                   {opt.label}
                 </option>
               ))}
@@ -251,17 +251,17 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
           </div>
 
           {/* Advanced Network (VPC / Subnet) Collapsible */}
-          <div className="pt-2">
+          <div className="pt-1">
             <button
               type="button"
               onClick={toggleNetworkSection}
-              className="w-full flex items-center justify-between text-xs text-zinc-400 hover:text-white p-2 rounded-md bg-zinc-950 border border-zinc-800 transition-colors"
+              className="w-full flex items-center justify-between text-xs text-zinc-700 hover:text-zinc-950 p-2.5 rounded-md bg-white border border-zinc-200 hover:border-zinc-300 transition-colors shadow-2xs"
             >
               <div className="flex items-center gap-2">
-                <Network className="w-3.5 h-3.5 text-zinc-400" />
-                <span className="font-medium text-zinc-300">Advanced Network (VPC / Subnet)</span>
+                <Network className="w-3.5 h-3.5 text-zinc-500" />
+                <span className="font-medium text-zinc-800">Advanced Network (VPC / Subnet)</span>
                 {config.vpc_id && (
-                  <span className="text-[10px] font-mono text-zinc-300 bg-zinc-900 border border-zinc-700 px-1.5 py-0.2 rounded">
+                  <span className="text-[10px] font-mono text-zinc-900 bg-zinc-100 border border-zinc-300 px-1.5 py-0.5 rounded">
                     Custom VPC
                   </span>
                 )}
@@ -269,24 +269,24 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
               <div className="flex items-center gap-1 text-[11px] text-zinc-500">
                 <span>{showNetworkSection ? 'Hide' : 'Configure'}</span>
                 {showNetworkSection ? (
-                  <ChevronUp className="w-3.5 h-3.5 text-zinc-400" />
+                  <ChevronUp className="w-3.5 h-3.5 text-zinc-500" />
                 ) : (
-                  <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                  <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
                 )}
               </div>
             </button>
 
             {showNetworkSection && (
-              <div className="mt-2 p-3 bg-zinc-950 border border-zinc-800 rounded-md space-y-3">
+              <div className="mt-2 p-3 bg-white border border-zinc-200 rounded-md space-y-3 shadow-2xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-zinc-400">
-                    Network target in <code className="text-zinc-200">{config.region}</code>
+                  <span className="text-[11px] text-zinc-600">
+                    Network target in <code className="text-zinc-900 font-mono">{config.region}</code>
                   </span>
                   <button
                     type="button"
                     onClick={() => fetchNetworks(config.region)}
                     disabled={loadingNetworks}
-                    className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-white transition-colors"
+                    className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-950 transition-colors"
                     title="Refresh VPC and Subnet list"
                   >
                     <RefreshCw className={`w-3 h-3 ${loadingNetworks ? 'animate-spin' : ''}`} />
@@ -295,20 +295,20 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
                 </div>
 
                 {loadingNetworks ? (
-                  <div className="flex items-center justify-center py-4 text-xs text-zinc-400 gap-2">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-400" />
+                  <div className="flex items-center justify-center py-4 text-xs text-zinc-600 gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-600" />
                     <span>Querying AWS VPCs and Subnets...</span>
                   </div>
                 ) : networkError ? (
-                  <div className="p-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-300">
-                    <p className="font-mono text-[11px] text-zinc-400">{networkError}</p>
+                  <div className="p-2.5 rounded bg-zinc-50 border border-zinc-200 text-xs text-zinc-700">
+                    <p className="font-mono text-[11px] text-zinc-700">{networkError}</p>
                     <p className="text-[10px] text-zinc-500 mt-1">Default VPC will be used by Packer automatically.</p>
                   </div>
                 ) : (
                   <>
                     {/* VPC Select */}
                     <div>
-                      <label className="block text-[11px] font-medium text-zinc-300 mb-1">
+                      <label className="block text-[11px] font-medium text-zinc-700 mb-1">
                         Virtual Private Cloud (VPC)
                       </label>
                       <select
@@ -318,7 +318,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
                           updateField('vpc_id', val || undefined)
                           updateField('subnet_id', undefined)
                         }}
-                        className="w-full bg-zinc-900 border border-zinc-800 text-white rounded-md px-2.5 py-1.5 text-xs font-mono focus:border-white focus:ring-0 outline-none"
+                        className="w-full bg-white border border-zinc-300 text-zinc-900 rounded-md px-2.5 py-1.5 text-xs font-mono focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950 outline-none shadow-2xs"
                       >
                         <option value="">Default VPC (Auto-detect by Packer)</option>
                         {networks?.vpcs.map((vpc) => (
@@ -331,13 +331,13 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
 
                     {/* Subnet Select */}
                     <div>
-                      <label className="block text-[11px] font-medium text-zinc-300 mb-1">
+                      <label className="block text-[11px] font-medium text-zinc-700 mb-1">
                         Subnet (Optional)
                       </label>
                       <select
                         value={config.subnet_id || ''}
                         onChange={(e) => updateField('subnet_id', e.target.value || undefined)}
-                        className="w-full bg-zinc-900 border border-zinc-800 text-white rounded-md px-2.5 py-1.5 text-xs font-mono focus:border-white focus:ring-0 outline-none"
+                        className="w-full bg-white border border-zinc-300 text-zinc-900 rounded-md px-2.5 py-1.5 text-xs font-mono focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950 outline-none shadow-2xs"
                       >
                         <option value="">Auto-assign Subnet in VPC</option>
                         {(networks?.subnets || [])
@@ -357,22 +357,22 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
         </div>
 
         {/* Section 2: Official Base Image Discovery */}
-        <div className="space-y-3 pt-4 border-t border-zinc-800">
+        <div className="space-y-3 pt-4 border-t border-zinc-200">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-zinc-400" />
+            <h3 className="text-xs font-semibold text-zinc-950 uppercase tracking-wider flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-zinc-500" />
               Official Base Image
             </h3>
 
             {/* Architecture Toggle */}
-            <div className="flex items-center bg-zinc-900 rounded-md p-0.5 border border-zinc-800 text-[11px]">
+            <div className="flex items-center bg-zinc-100 rounded-md p-0.5 border border-zinc-200 text-[11px]">
               <button
                 type="button"
                 onClick={() => onArchChange('x86_64')}
                 className={`px-2 py-0.5 rounded font-mono transition-colors ${
                   architecture === 'x86_64'
-                    ? 'bg-white text-black font-medium'
-                    : 'text-zinc-400 hover:text-white'
+                    ? 'bg-white text-zinc-950 font-medium shadow-2xs'
+                    : 'text-zinc-600 hover:text-zinc-950'
                 }`}
               >
                 x86_64
@@ -382,8 +382,8 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
                 onClick={() => onArchChange('arm64')}
                 className={`px-2 py-0.5 rounded font-mono transition-colors ${
                   architecture === 'arm64'
-                    ? 'bg-white text-black font-medium'
-                    : 'text-zinc-400 hover:text-white'
+                    ? 'bg-white text-zinc-950 font-medium shadow-2xs'
+                    : 'text-zinc-600 hover:text-zinc-950'
                 }`}
               >
                 arm64
@@ -392,16 +392,16 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
           </div>
 
           <div className="flex items-center justify-between text-[11px]">
-            <span className="text-zinc-400">
-              Verified distributions for <code className="text-zinc-200">{config.region}</code>:
+            <span className="text-zinc-600">
+              Verified distributions for <code className="text-zinc-900 font-mono">{config.region}</code>:
             </span>
             {baseAMIsLoading ? (
-              <span className="flex items-center gap-1 text-zinc-400 text-[10px]">
-                <Loader2 className="w-3 h-3 animate-spin text-zinc-400" />
+              <span className="flex items-center gap-1 text-zinc-500 text-[10px]">
+                <Loader2 className="w-3 h-3 animate-spin text-zinc-500" />
                 Querying EC2...
               </span>
             ) : (
-              <span className="text-[10px] font-mono text-zinc-400 border border-zinc-800 bg-zinc-900 px-1.5 py-0.2 rounded">
+              <span className="text-[10px] font-mono text-zinc-600 border border-zinc-200 bg-white px-1.5 py-0.5 rounded shadow-2xs">
                 {baseAMISource === 'aws_live' ? 'Live EC2' : 'Curated Preset'}
               </span>
             )}
@@ -418,35 +418,37 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
                   onClick={() => selectBaseAMI(ami)}
                   className={`p-3 rounded-md border cursor-pointer transition-all ${
                     isSelected
-                      ? 'border-white bg-zinc-900 text-white'
-                      : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300'
+                      ? 'border-zinc-950 bg-white ring-1 ring-zinc-950 shadow-2xs'
+                      : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50/50'
                   }`}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-2.5">
                       <div
                         className={`mt-0.5 w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
-                          isSelected ? 'border-white bg-white text-black' : 'border-zinc-700 bg-zinc-950'
+                          isSelected ? 'border-zinc-950 bg-zinc-950' : 'border-zinc-300 bg-white'
                         }`}
                       >
-                        {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-black"></div>}
+                        {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white"></div>}
                       </div>
                       <div>
                         <div className="text-xs font-medium flex items-center gap-2">
-                          <span className={isSelected ? 'text-white' : 'text-zinc-200'}>{ami.display_name}</span>
-                          <span className="text-[10px] font-mono text-zinc-400 border border-zinc-800 bg-zinc-950 px-1.5 py-0.2 rounded">
+                          <span className={isSelected ? 'text-zinc-950 font-semibold' : 'text-zinc-900'}>
+                            {ami.display_name}
+                          </span>
+                          <span className="text-[10px] font-mono text-zinc-600 border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 rounded">
                             user: {ami.default_user}
                           </span>
                         </div>
-                        <p className="text-[11px] text-zinc-400 mt-0.5 line-clamp-1 leading-relaxed">
+                        <p className="text-[11px] text-zinc-500 mt-0.5 line-clamp-1 leading-relaxed">
                           {ami.description}
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="mt-2 pt-2 border-t border-zinc-800/80 flex items-center justify-between text-[10px] font-mono text-zinc-500">
-                    <span className={isSelected ? 'text-zinc-300' : 'text-zinc-500'}>{ami.id}</span>
+                  <div className="mt-2 pt-2 border-t border-zinc-100 flex items-center justify-between text-[10px] font-mono text-zinc-500">
+                    <span className={isSelected ? 'text-zinc-900 font-medium' : 'text-zinc-500'}>{ami.id}</span>
                     <span>{ami.architecture}</span>
                   </div>
                 </div>
@@ -459,16 +461,16 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
             <button
               type="button"
               onClick={() => setShowManualAMI(!showManualAMI)}
-              className="text-[11px] text-zinc-400 hover:text-zinc-200 flex items-center gap-1 transition-colors"
+              className="text-[11px] text-zinc-600 hover:text-zinc-950 flex items-center gap-1 transition-colors"
             >
               <Edit3 className="w-3 h-3" />
               <span>{showManualAMI ? 'Hide Custom AMI Input' : 'Enter Custom / Private AMI ID'}</span>
             </button>
 
             {showManualAMI && (
-              <div className="mt-2 space-y-2 p-3 bg-zinc-900 border border-zinc-800 rounded-md">
+              <div className="mt-2 space-y-2 p-3 bg-white border border-zinc-200 rounded-md shadow-2xs">
                 <div>
-                  <label className="block text-[11px] font-medium text-zinc-300 mb-1">
+                  <label className="block text-[11px] font-medium text-zinc-700 mb-1">
                     Custom Source AMI ID
                   </label>
                   <input
@@ -476,7 +478,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
                     value={config.source_ami}
                     onChange={(e) => updateField('source_ami', e.target.value)}
                     placeholder="ami-0123456789abcdef0"
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-md px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:border-white focus:ring-0 outline-none font-mono"
+                    className="w-full bg-white border border-zinc-300 rounded-md px-2.5 py-1.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950 outline-none font-mono shadow-2xs"
                   />
                 </div>
               </div>
@@ -485,8 +487,8 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
 
           {/* SSH Username */}
           <div className="pt-1">
-            <label className="block text-xs font-medium text-zinc-300 mb-1 flex items-center gap-1">
-              <Key className="w-3.5 h-3.5 text-zinc-400" />
+            <label className="block text-xs font-medium text-zinc-800 mb-1 flex items-center gap-1">
+              <Key className="w-3.5 h-3.5 text-zinc-500" />
               SSH Username (Source OS Login)
             </label>
             <div className="flex gap-2">
@@ -495,17 +497,17 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
                 value={config.ssh_username}
                 onChange={(e) => updateField('ssh_username', e.target.value)}
                 placeholder="ubuntu"
-                className="flex-1 bg-zinc-900 border border-zinc-800 rounded-md px-3 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:border-white focus:ring-0 outline-none font-mono"
+                className="flex-1 bg-white border border-zinc-300 rounded-md px-3 py-1.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950 outline-none font-mono shadow-2xs"
               />
               {(['ubuntu', 'ec2-user', 'admin'] as const).map((user) => (
                 <button
                   key={user}
                   type="button"
                   onClick={() => updateField('ssh_username', user)}
-                  className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
+                  className={`text-xs px-2.5 py-1 rounded-md border transition-colors shadow-2xs ${
                     config.ssh_username === user
-                      ? 'bg-white text-black font-medium border-white'
-                      : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                      ? 'bg-zinc-950 text-white font-medium border-zinc-950'
+                      : 'border-zinc-300 bg-white text-zinc-700 hover:border-zinc-400 hover:text-zinc-950'
                   }`}
                 >
                   {user}
@@ -516,10 +518,10 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
         </div>
 
         {/* Section 3: Software Catalogue */}
-        <div className="space-y-4 pt-4 border-t border-zinc-800">
+        <div className="space-y-4 pt-4 border-t border-zinc-200">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Package className="w-3.5 h-3.5 text-zinc-400" />
+            <h3 className="text-xs font-semibold text-zinc-950 uppercase tracking-wider flex items-center gap-1.5">
+              <Package className="w-3.5 h-3.5 text-zinc-500" />
               Software Packages
             </h3>
             <span className="text-[11px] text-zinc-500 font-mono">
@@ -542,8 +544,8 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
                     key={pkg.id}
                     className={`rounded-md border transition-all ${
                       isSelected
-                        ? 'border-white bg-zinc-900 text-white'
-                        : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300'
+                        ? 'border-zinc-950 bg-white ring-1 ring-zinc-950 shadow-2xs'
+                        : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50/50'
                     }`}
                   >
                     <div
@@ -555,16 +557,18 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => {}} // handled by parent div
-                          className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-white accent-white focus:ring-0 cursor-pointer"
+                          className="mt-0.5 w-4 h-4 rounded border-zinc-300 text-zinc-950 accent-zinc-950 focus:ring-0 cursor-pointer"
                         />
                         <div>
                           <div className="text-xs font-medium flex items-center gap-2">
-                            <span className={isSelected ? 'text-white' : 'text-zinc-200'}>{pkg.name}</span>
-                            <span className="text-[10px] font-mono text-zinc-500 bg-zinc-900 border border-zinc-800 px-1.5 py-0.2 rounded">
+                            <span className={isSelected ? 'text-zinc-950 font-semibold' : 'text-zinc-900'}>
+                              {pkg.name}
+                            </span>
+                            <span className="text-[10px] font-mono text-zinc-500 bg-zinc-50 border border-zinc-200 px-1.5 py-0.5 rounded">
                               {pkg.id}
                             </span>
                           </div>
-                          <p className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">
+                          <p className="text-[11px] text-zinc-500 mt-0.5 leading-relaxed">
                             {pkg.description}
                           </p>
                         </div>
@@ -576,7 +580,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
                           e.stopPropagation()
                           setExpandedPkg(isExpanded ? null : pkg.id)
                         }}
-                        className="text-zinc-500 hover:text-zinc-300 p-0.5 rounded"
+                        className="text-zinc-400 hover:text-zinc-700 p-0.5 rounded"
                         title="View commands"
                       >
                         {isExpanded ? (
@@ -589,12 +593,12 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
 
                     {/* Collapsible Command Details */}
                     {isExpanded && (
-                      <div className="px-3 pb-3 pt-1 border-t border-zinc-800 bg-black/40 rounded-b-md">
+                      <div className="px-3 pb-3 pt-2 border-t border-zinc-100 bg-zinc-50/80 rounded-b-md">
                         <div className="text-[10px] uppercase font-mono text-zinc-500 mb-1 flex items-center gap-1">
-                          <Code2 className="w-3 h-3 text-zinc-400" />
+                          <Code2 className="w-3 h-3 text-zinc-500" />
                           Commands Executed:
                         </div>
-                        <pre className="text-[11px] font-mono text-zinc-300 bg-zinc-950 p-2 rounded border border-zinc-800 overflow-x-auto">
+                        <pre className="text-[11px] font-mono text-zinc-800 bg-white p-2.5 rounded border border-zinc-200 overflow-x-auto shadow-2xs">
                           {pkg.commands.join('\n')}
                         </pre>
                       </div>
@@ -606,8 +610,8 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
           )}
 
           {/* Add custom apt package */}
-          <div className="pt-2">
-            <label className="block text-xs font-medium text-zinc-400 mb-1">
+          <div className="pt-1">
+            <label className="block text-xs font-medium text-zinc-700 mb-1">
               Add Custom Apt Package
             </label>
             <div className="flex gap-2">
@@ -622,12 +626,12 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
                   }
                 }}
                 placeholder="e.g. htop, curl, jq, ripgrep"
-                className="flex-1 bg-zinc-900 border border-zinc-800 rounded-md px-3 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:border-white focus:ring-0 outline-none font-mono"
+                className="flex-1 bg-white border border-zinc-300 rounded-md px-3 py-1.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950 outline-none font-mono shadow-2xs"
               />
               <button
                 type="button"
                 onClick={addCustomPackage}
-                className="border border-zinc-700 text-zinc-300 hover:border-zinc-400 hover:text-white bg-transparent px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1 transition-colors"
+                className="border border-zinc-300 text-zinc-800 hover:border-zinc-400 hover:bg-zinc-50 bg-white px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1 transition-colors shadow-2xs"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Add
@@ -644,13 +648,13 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
                   .map((customPkg) => (
                     <span
                       key={customPkg}
-                      className="inline-flex items-center gap-1 text-[11px] font-mono bg-zinc-900 text-zinc-300 border border-zinc-800 px-2 py-0.5 rounded-md"
+                      className="inline-flex items-center gap-1 text-[11px] font-mono bg-white text-zinc-800 border border-zinc-200 px-2 py-0.5 rounded-md shadow-2xs"
                     >
                       {customPkg}
                       <button
                         type="button"
                         onClick={() => togglePackage(customPkg)}
-                        className="text-zinc-500 hover:text-white"
+                        className="text-zinc-400 hover:text-zinc-900 ml-0.5"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -662,9 +666,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
         </div>
 
         {/* Section 4: Custom Inline Shell Scripts */}
-        <div className="space-y-2 pt-4 border-t border-zinc-800">
-          <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-            <Terminal className="w-3.5 h-3.5 text-zinc-400" />
+        <div className="space-y-2 pt-4 border-t border-zinc-200">
+          <h3 className="text-xs font-semibold text-zinc-950 uppercase tracking-wider flex items-center gap-1.5">
+            <Terminal className="w-3.5 h-3.5 text-zinc-500" />
             Custom Shell Commands
           </h3>
           <p className="text-[11px] text-zinc-500 leading-relaxed">
@@ -675,7 +679,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
             value={customScriptText}
             onChange={(e) => handleCustomScriptChange(e.target.value)}
             placeholder={`echo "Setting up application..."\nsudo mkdir -p /var/www/app\nsudo chown -R ubuntu:ubuntu /var/www`}
-            className="w-full bg-zinc-900 border border-zinc-800 text-white focus:border-white focus:ring-0 outline-none rounded-md p-3 text-xs font-mono placeholder:text-zinc-600 transition-colors resize-y"
+            className="w-full bg-white border border-zinc-300 text-zinc-900 focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950 outline-none rounded-md p-3 text-xs font-mono placeholder:text-zinc-400 transition-colors resize-y shadow-2xs"
           />
         </div>
       </div>

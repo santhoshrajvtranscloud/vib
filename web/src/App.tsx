@@ -549,7 +549,7 @@ export function App() {
   }, [])
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-black">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-white text-zinc-950">
       {/* Header */}
       <Header
         health={health}
@@ -567,7 +567,7 @@ export function App() {
         /* Split-Screen Visual Builder & Code Terminal Workspace */
         <div className="flex-1 flex overflow-hidden">
           {/* Left Panel: Visual Builder Form */}
-          <div className="w-[440px] shrink-0 h-full overflow-hidden flex flex-col bg-zinc-950">
+          <div className="w-[440px] shrink-0 h-full overflow-hidden flex flex-col bg-zinc-50 border-r border-zinc-200">
             <VisualBuilder
               config={config}
               onChange={setConfig}
@@ -584,9 +584,9 @@ export function App() {
           </div>
 
           {/* Right Panel: Split into Monaco Editor (Top) & Live Logs Terminal (Bottom) */}
-          <div className="flex-1 flex flex-col h-full overflow-hidden border-l border-zinc-800 bg-black">
+          <div className="flex-1 flex flex-col h-full overflow-hidden border-l border-zinc-200 bg-white">
             {/* Top Half: Monaco HCL Editor */}
-            <div className="flex-1 min-h-[280px] overflow-hidden bg-black">
+            <div className="flex-1 min-h-[280px] overflow-hidden bg-white">
               <HclEditor
                 hclCode={hclCode}
                 onChange={handleEditorChange}
@@ -607,7 +607,7 @@ export function App() {
             </div>
 
             {/* Bottom Half: Live Terminal Logs */}
-            <div className="h-[340px] shrink-0 overflow-hidden bg-black">
+            <div className="h-[340px] shrink-0 overflow-hidden bg-zinc-950 border-t border-zinc-200">
               <TerminalLogs
                 logs={logs}
                 onClear={() => setLogs([])}
@@ -618,7 +618,7 @@ export function App() {
         </div>
       ) : (
         /* AMI Dashboard & Build History Tab */
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden bg-white">
           <AmiDashboard
             region={config.region}
             onLoadConfigToBuilder={handleLoadConfigToBuilder}

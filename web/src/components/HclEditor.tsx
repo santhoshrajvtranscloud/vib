@@ -68,45 +68,45 @@ export const HclEditor: React.FC<HclEditorProps> = ({
   }
 
   const handleBeforeMount = (monaco: any) => {
-    monaco.editor.defineTheme('vib-monochrome', {
-      base: 'vs-dark',
+    monaco.editor.defineTheme('vib-light', {
+      base: 'vs',
       inherit: true,
       rules: [
-        { token: '', foreground: 'd4d4d8' },
-        { token: 'string', foreground: 'ffffff' },
-        { token: 'keyword', foreground: 'ffffff', fontStyle: 'bold' },
+        { token: '', foreground: '09090b' },
+        { token: 'string', foreground: '18181b' },
+        { token: 'keyword', foreground: '09090b', fontStyle: 'bold' },
         { token: 'comment', foreground: '71717a', fontStyle: 'italic' },
-        { token: 'number', foreground: 'e4e4e7' },
-        { token: 'type', foreground: 'fafafa' },
+        { token: 'number', foreground: '27272a' },
+        { token: 'type', foreground: '09090b' },
       ],
       colors: {
-        'editor.background': '#000000',
-        'editor.foreground': '#f4f4f5',
-        'editor.lineHighlightBackground': '#18181b50',
-        'editorLineNumber.foreground': '#52525b',
-        'editorLineNumber.activeForeground': '#fafafa',
-        'editorCursor.foreground': '#ffffff',
-        'editor.selectionBackground': '#27272a',
-        'editor.inactiveSelectionBackground': '#18181b',
+        'editor.background': '#ffffff',
+        'editor.foreground': '#09090b',
+        'editor.lineHighlightBackground': '#f4f4f580',
+        'editorLineNumber.foreground': '#a1a1aa',
+        'editorLineNumber.activeForeground': '#09090b',
+        'editorCursor.foreground': '#09090b',
+        'editor.selectionBackground': '#e4e4e7',
+        'editor.inactiveSelectionBackground': '#f4f4f5',
       },
     })
   }
 
   return (
-    <div className="flex flex-col h-full bg-black">
+    <div className="flex flex-col h-full bg-white">
       {/* Editor Control Bar */}
-      <div className="h-11 border-b border-zinc-800 bg-zinc-950 px-3 flex items-center justify-between shrink-0 select-none">
+      <div className="h-11 border-b border-zinc-200 bg-zinc-50 px-3 flex items-center justify-between shrink-0 select-none">
         {/* Left: Tab & Mode indicator */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-black border border-zinc-800 text-xs font-mono text-zinc-300">
-            <FileCode2 className="w-3.5 h-3.5 text-zinc-400" />
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-zinc-200 text-xs font-mono text-zinc-800 shadow-2xs">
+            <FileCode2 className="w-3.5 h-3.5 text-zinc-500" />
             aws-build.pkr.hcl
           </div>
 
           {isManualMode ? (
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-medium text-zinc-300 bg-zinc-900 border border-zinc-700 px-2 py-0.5 rounded-md flex items-center gap-1 font-mono">
-                <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+              <span className="text-[11px] font-medium text-zinc-900 bg-zinc-100 border border-zinc-300 px-2 py-0.5 rounded-md flex items-center gap-1 font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-zinc-950"></span>
                 Manual Edit
               </span>
 
@@ -115,13 +115,13 @@ export const HclEditor: React.FC<HclEditorProps> = ({
                   type="button"
                   onClick={onSyncToForm}
                   disabled={isSyncingToForm || isBuilding}
-                  className="text-[11px] font-medium text-black bg-white hover:bg-zinc-200 px-2.5 py-0.5 rounded-md flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                  className="text-[11px] font-medium text-white bg-zinc-950 hover:bg-zinc-800 px-2.5 py-0.5 rounded-md flex items-center gap-1.5 transition-colors disabled:opacity-50 shadow-2xs"
                   title="Parse HCL into Visual Builder form"
                 >
                   {isSyncingToForm ? (
-                    <Loader2 className="w-3 h-3 animate-spin text-black" />
+                    <Loader2 className="w-3 h-3 animate-spin text-white" />
                   ) : (
-                    <SlidersHorizontal className="w-3 h-3 text-black" />
+                    <SlidersHorizontal className="w-3 h-3 text-white" />
                   )}
                   Sync to Form
                 </button>
@@ -130,7 +130,7 @@ export const HclEditor: React.FC<HclEditorProps> = ({
               <button
                 type="button"
                 onClick={onResetToForm}
-                className="text-[11px] text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 px-2 py-0.5 rounded-md border border-zinc-800 flex items-center gap-1 transition-colors"
+                className="text-[11px] text-zinc-600 hover:text-zinc-950 bg-white hover:bg-zinc-100 px-2 py-0.5 rounded-md border border-zinc-200 flex items-center gap-1 transition-colors shadow-2xs"
                 title="Discard manual edits and sync with UI form"
               >
                 <RotateCcw className="w-3 h-3" />
@@ -152,17 +152,17 @@ export const HclEditor: React.FC<HclEditorProps> = ({
               type="button"
               onClick={onPreflight}
               disabled={isPreflighting || isBuilding}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border border-zinc-700 text-zinc-300 hover:border-zinc-400 hover:text-white bg-transparent disabled:opacity-50 transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border border-zinc-300 text-zinc-700 hover:border-zinc-400 hover:text-zinc-950 bg-white hover:bg-zinc-50 disabled:opacity-50 transition-colors shadow-2xs"
               title="Run AWS Pre-Flight readiness check (STS, Network, AMI, EC2 Permissions)"
             >
               {isPreflighting ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-400" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-500" />
                   Pre-Flight...
                 </>
               ) : (
                 <>
-                  <ShieldCheck className="w-3.5 h-3.5 text-zinc-400" />
+                  <ShieldCheck className="w-3.5 h-3.5 text-zinc-600" />
                   Pre-Flight
                 </>
               )}
@@ -174,17 +174,17 @@ export const HclEditor: React.FC<HclEditorProps> = ({
             type="button"
             onClick={onValidate}
             disabled={isValidating || isBuilding}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border border-zinc-700 text-zinc-300 hover:border-zinc-400 hover:text-white bg-transparent disabled:opacity-50 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border border-zinc-300 text-zinc-700 hover:border-zinc-400 hover:text-zinc-950 bg-white hover:bg-zinc-50 disabled:opacity-50 transition-colors shadow-2xs"
             title="Run packer validate on this template"
           >
             {isValidating ? (
               <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-400" />
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-500" />
                 Validating...
               </>
             ) : (
               <>
-                <CheckCircle className="w-3.5 h-3.5 text-zinc-400" />
+                <CheckCircle className="w-3.5 h-3.5 text-zinc-600" />
                 Validate
               </>
             )}
@@ -194,7 +194,7 @@ export const HclEditor: React.FC<HclEditorProps> = ({
           <button
             type="button"
             onClick={handleDownload}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs border border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700 hover:text-white transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs border border-zinc-300 bg-white text-zinc-700 hover:border-zinc-400 hover:text-zinc-950 hover:bg-zinc-50 transition-colors shadow-2xs"
             title="Download aws-build.pkr.hcl"
           >
             <Download className="w-3.5 h-3.5" />
@@ -207,7 +207,7 @@ export const HclEditor: React.FC<HclEditorProps> = ({
               type="button"
               onClick={onCancel}
               disabled={currentBuild?.status === 'cancelling'}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-white disabled:opacity-50 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium border border-zinc-300 bg-white hover:bg-zinc-50 text-zinc-900 disabled:opacity-50 shadow-2xs transition-colors"
             >
               <Square className="w-3.5 h-3.5 fill-current" />
               {currentBuild?.status === 'cancelling' ? 'Cancelling...' : 'Cancel Build'}
@@ -216,7 +216,7 @@ export const HclEditor: React.FC<HclEditorProps> = ({
             <button
               type="button"
               onClick={onBuild}
-              className="flex items-center gap-1.5 px-3.5 py-1 rounded-md text-xs bg-white text-black font-medium hover:bg-zinc-200 transition-colors"
+              className="flex items-center gap-1.5 px-3.5 py-1 rounded-md text-xs bg-zinc-950 text-white font-medium hover:bg-zinc-800 shadow-xs transition-colors"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
               Build AMI
@@ -230,15 +230,15 @@ export const HclEditor: React.FC<HclEditorProps> = ({
         <div
           className={`px-3 py-1.5 text-xs flex items-center justify-between border-b shrink-0 transition-colors ${
             syncNotification.type === 'success'
-              ? 'bg-zinc-900 border-zinc-700 text-white'
-              : 'bg-zinc-950 border-zinc-800 text-zinc-300'
+              ? 'bg-zinc-100 border-zinc-200 text-zinc-900'
+              : 'bg-zinc-100 border-zinc-300 text-zinc-900'
           }`}
         >
           <div className="flex items-center gap-2 overflow-hidden">
             {syncNotification.type === 'success' ? (
-              <CheckCircle className="w-3.5 h-3.5 text-white shrink-0" />
+              <CheckCircle className="w-3.5 h-3.5 text-zinc-900 shrink-0" />
             ) : (
-              <AlertCircle className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+              <AlertCircle className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
             )}
             <span className="font-mono text-xs truncate">{syncNotification.message}</span>
           </div>
@@ -246,7 +246,7 @@ export const HclEditor: React.FC<HclEditorProps> = ({
             <button
               type="button"
               onClick={onClearNotification}
-              className="text-zinc-500 hover:text-white shrink-0 ml-2 p-0.5"
+              className="text-zinc-500 hover:text-zinc-900 shrink-0 ml-2 p-0.5"
               title="Dismiss"
             >
               <X className="w-3.5 h-3.5" />
@@ -256,11 +256,11 @@ export const HclEditor: React.FC<HclEditorProps> = ({
       )}
 
       {/* Monaco Code Editor */}
-      <div className="flex-1 w-full overflow-hidden bg-black">
+      <div className="flex-1 w-full overflow-hidden bg-white">
         <Editor
           height="100%"
           language="hcl"
-          theme="vib-monochrome"
+          theme="vib-light"
           beforeMount={handleBeforeMount}
           value={hclCode}
           onChange={(val) => {

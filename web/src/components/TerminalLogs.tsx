@@ -56,12 +56,12 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full bg-black border-t border-zinc-800 text-xs font-mono">
+    <div className="flex flex-col h-full bg-zinc-950 text-xs font-mono">
       {/* Terminal Header Bar */}
-      <div className="h-10 bg-zinc-950 border-b border-zinc-800 px-3 flex items-center justify-between shrink-0 select-none">
+      <div className="h-10 bg-zinc-50 border-b border-zinc-200 px-3 flex items-center justify-between shrink-0 select-none">
         <div className="flex items-center gap-2">
-          <TerminalIcon className="w-3.5 h-3.5 text-zinc-400" />
-          <span className="font-semibold text-zinc-200">Terminal Logs</span>
+          <TerminalIcon className="w-3.5 h-3.5 text-zinc-600" />
+          <span className="font-semibold text-zinc-950">Terminal Logs</span>
           <span className="text-[10px] text-zinc-500 font-mono">
             {logs.length} lines
           </span>
@@ -70,7 +70,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
         {/* Filters and Actions */}
         <div className="flex items-center gap-2">
           {/* Stream Filter */}
-          <div className="flex items-center bg-zinc-900 rounded-md p-0.5 border border-zinc-800 text-[11px]">
+          <div className="flex items-center bg-zinc-100 rounded-md p-0.5 border border-zinc-200 text-[11px]">
             {(['all', 'system', 'stdout', 'stderr'] as const).map((s) => (
               <button
                 key={s}
@@ -78,8 +78,8 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
                 onClick={() => setFilter(s)}
                 className={`px-2 py-0.5 rounded capitalize transition-colors ${
                   filter === s
-                    ? 'bg-white text-black font-medium'
-                    : 'text-zinc-400 hover:text-white'
+                    ? 'bg-white text-zinc-950 font-medium shadow-2xs'
+                    : 'text-zinc-600 hover:text-zinc-950'
                 }`}
               >
                 {s}
@@ -91,10 +91,10 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
           <button
             type="button"
             onClick={() => setAutoScroll(!autoScroll)}
-            className={`p-1.5 rounded-md border transition-colors ${
+            className={`p-1.5 rounded-md border transition-colors shadow-2xs ${
               autoScroll
-                ? 'border-zinc-600 bg-zinc-800 text-white'
-                : 'border-zinc-800 bg-zinc-900 text-zinc-500 hover:text-zinc-300'
+                ? 'border-zinc-300 bg-white text-zinc-950'
+                : 'border-zinc-200 bg-zinc-100 text-zinc-500 hover:text-zinc-900'
             }`}
             title={autoScroll ? 'Auto-scroll enabled' : 'Auto-scroll disabled'}
           >
@@ -105,7 +105,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
           <button
             type="button"
             onClick={onClear}
-            className="p-1.5 text-zinc-500 hover:text-white bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-md transition-colors"
+            className="p-1.5 text-zinc-600 hover:text-zinc-950 bg-white border border-zinc-200 hover:border-zinc-300 rounded-md transition-colors shadow-2xs"
             title="Clear logs"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -115,18 +115,18 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
 
       {/* Final Outcome Banner (if build has finished) */}
       {currentBuild && currentBuild.status === 'success' && currentBuild.ami_id && (
-        <div className="p-3 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between gap-3 shrink-0">
+        <div className="p-3 bg-zinc-100 border-b border-zinc-200 flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded-md bg-white text-black flex items-center justify-center shrink-0">
-              <CheckCircle2 className="w-4 h-4 text-black stroke-[2.5]" />
+            <div className="w-6 h-6 rounded-md bg-zinc-950 text-white flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-4 h-4 text-white stroke-[2.5]" />
             </div>
             <div>
-              <div className="text-white font-medium text-xs font-sans">
+              <div className="text-zinc-950 font-medium text-xs font-sans">
                 AMI Created Successfully
               </div>
               <div className="flex items-center gap-2 mt-0.5 font-mono">
-                <span className="text-zinc-400 text-[11px] font-sans">AMI ID:</span>
-                <code className="text-white bg-black border border-zinc-700 px-2 py-0.5 rounded text-xs font-bold">
+                <span className="text-zinc-600 text-[11px] font-sans">AMI ID:</span>
+                <code className="text-zinc-950 bg-white border border-zinc-300 px-2 py-0.5 rounded text-xs font-bold shadow-2xs">
                   {currentBuild.ami_id}
                 </code>
               </div>
@@ -136,7 +136,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
           <button
             type="button"
             onClick={() => copyAMI(currentBuild.ami_id!)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white text-black hover:bg-zinc-200 font-sans text-xs font-medium transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-950 text-white hover:bg-zinc-800 font-sans text-xs font-medium transition-colors shadow-2xs"
           >
             {copied ? (
               <>
@@ -154,13 +154,13 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
       )}
 
       {currentBuild && currentBuild.status === 'failed' && (
-        <div className="p-3 bg-zinc-900 border-b border-zinc-800 flex items-center gap-2.5 shrink-0">
-          <XCircle className="w-4 h-4 text-zinc-400 shrink-0" />
+        <div className="p-3 bg-zinc-100 border-b border-zinc-200 flex items-center gap-2.5 shrink-0">
+          <XCircle className="w-4 h-4 text-zinc-700 shrink-0" />
           <div>
-            <div className="text-white font-medium text-xs font-sans">
+            <div className="text-zinc-950 font-medium text-xs font-sans">
               Packer Execution Failed
             </div>
-            <div className="text-zinc-400 text-[11px] mt-0.5 font-sans">
+            <div className="text-zinc-600 text-[11px] mt-0.5 font-sans">
               {currentBuild.error || 'Check log lines below for troubleshooting information.'}
             </div>
           </div>
@@ -168,13 +168,13 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
       )}
 
       {currentBuild && currentBuild.status === 'cancelled' && (
-        <div className="p-3 bg-zinc-900 border-b border-zinc-800 flex items-center gap-2.5 shrink-0">
-          <AlertTriangle className="w-4 h-4 text-zinc-400 shrink-0" />
+        <div className="p-3 bg-zinc-100 border-b border-zinc-200 flex items-center gap-2.5 shrink-0">
+          <AlertTriangle className="w-4 h-4 text-zinc-600 shrink-0" />
           <div>
-            <div className="text-zinc-200 font-medium text-xs font-sans">
+            <div className="text-zinc-950 font-medium text-xs font-sans">
               Build Cancelled by User
             </div>
-            <div className="text-zinc-500 text-[11px] mt-0.5 font-sans">
+            <div className="text-zinc-600 text-[11px] mt-0.5 font-sans">
               Packer sent SIGINT to cleanly terminate EC2 resources.
             </div>
           </div>
@@ -184,13 +184,13 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
       {/* Log Output Body */}
       <div
         ref={containerRef}
-        className="flex-1 p-3 overflow-y-auto space-y-1 font-mono text-[11px] leading-relaxed select-text bg-black"
+        className="flex-1 p-3 overflow-y-auto space-y-1 font-mono text-[11px] leading-relaxed select-text bg-zinc-950 text-zinc-200"
       >
         {filteredLogs.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-zinc-600 gap-1.5 select-none">
-            <Clock className="w-5 h-5 opacity-40" />
-            <p className="text-xs text-zinc-500 font-sans">No logs recorded yet</p>
-            <p className="text-[11px] text-zinc-600 font-sans">
+          <div className="h-full flex flex-col items-center justify-center text-zinc-500 gap-1.5 select-none">
+            <Clock className="w-5 h-5 opacity-40 text-zinc-500" />
+            <p className="text-xs text-zinc-400 font-sans">No logs recorded yet</p>
+            <p className="text-[11px] text-zinc-500 font-sans">
               Run &quot;Validate&quot; or &quot;Build AMI&quot; to see real-time output streamed from Packer.
             </p>
           </div>
@@ -204,11 +204,11 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
 
             if (entry.stream === 'system') {
               streamTag = '[STATUS]'
-              tagColor = 'text-white'
+              tagColor = 'text-zinc-100'
               textColor = 'text-zinc-100 font-medium'
             } else if (entry.stream === 'stderr') {
               streamTag = '[STDERR]'
-              tagColor = 'text-zinc-400 font-semibold'
+              tagColor = 'text-zinc-300 font-semibold'
               textColor = 'text-white'
             } else if (entry.message.toLowerCase().includes('error')) {
               textColor = 'text-white font-semibold'
@@ -217,9 +217,9 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
             }
 
             return (
-              <div key={idx} className="flex items-start gap-2 px-1 py-0.5 rounded hover:bg-zinc-950">
+              <div key={idx} className="flex items-start gap-2 px-1 py-0.5 rounded hover:bg-zinc-900/60">
                 {timeStr && (
-                  <span className="text-zinc-600 shrink-0 select-none text-[10px]">
+                  <span className="text-zinc-500 shrink-0 select-none text-[10px]">
                     {timeStr}
                   </span>
                 )}
