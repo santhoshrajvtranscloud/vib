@@ -16,6 +16,7 @@ import (
 type VIBImage struct {
 	AMIID        string            `json:"ami_id"`
 	Name         string            `json:"name"`
+	OwnerID      string            `json:"owner_id,omitempty"`
 	Region       string            `json:"region"`
 	CreationDate string            `json:"creation_date"`
 	State        string            `json:"state"`
@@ -88,6 +89,7 @@ func ListVIBImagesWithClient(ctx context.Context, client EC2LifecycleAPI, region
 		images = append(images, VIBImage{
 			AMIID:        amiID,
 			Name:         aws.ToString(img.Name),
+			OwnerID:      aws.ToString(img.OwnerId),
 			Region:       region,
 			CreationDate: aws.ToString(img.CreationDate),
 			State:        string(img.State),

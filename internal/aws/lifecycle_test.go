@@ -76,6 +76,7 @@ func TestListVIBImages(t *testing.T) {
 			{
 				ImageId:      aws.String("ami-22222222222222222"),
 				Name:         aws.String("vib-app-2"),
+				OwnerId:      aws.String("123456789012"),
 				CreationDate: aws.String("2024-04-02T12:00:00.000Z"),
 				State:        ec2types.ImageStateAvailable,
 				Tags: []ec2types.Tag{
@@ -113,6 +114,9 @@ func TestListVIBImages(t *testing.T) {
 	}
 	if images[0].BuildID != "vib-build-2" {
 		t.Errorf("expected buildID vib-build-2, got %s", images[0].BuildID)
+	}
+	if images[0].OwnerID != "123456789012" {
+		t.Errorf("expected OwnerID 123456789012, got %s", images[0].OwnerID)
 	}
 	if len(images[0].SnapshotIDs) != 2 {
 		t.Errorf("expected 2 snapshots, got %d", len(images[0].SnapshotIDs))

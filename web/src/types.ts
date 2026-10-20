@@ -123,6 +123,7 @@ export interface VIBImageItem {
   build_id?: string
   ami_id: string
   name: string
+  owner_id?: string
   region: string
   status: string
   creation_date: string

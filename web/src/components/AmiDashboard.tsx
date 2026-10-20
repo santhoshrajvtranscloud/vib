@@ -136,6 +136,7 @@ export const AmiDashboard: React.FC<AmiDashboardProps> = ({
     return (
       (img.name && img.name.toLowerCase().includes(q)) ||
       (img.ami_id && img.ami_id.toLowerCase().includes(q)) ||
+      (img.owner_id && img.owner_id.toLowerCase().includes(q)) ||
       (img.build_id && img.build_id.toLowerCase().includes(q)) ||
       (img.region && img.region.toLowerCase().includes(q))
     )
@@ -170,8 +171,8 @@ export const AmiDashboard: React.FC<AmiDashboardProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search AMI, name, build ID..."
-              className="bg-white border border-zinc-300 text-zinc-900 rounded-md pl-8 pr-3 py-1.5 text-xs font-mono placeholder:text-zinc-400 focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950 outline-none w-64 transition-colors shadow-2xs"
+              placeholder="Search AMI, name, owner ID, build ID..."
+              className="bg-white border border-zinc-300 text-zinc-900 rounded-md pl-8 pr-3 py-1.5 text-xs font-mono placeholder:text-zinc-400 focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950 outline-none w-68 transition-colors shadow-2xs"
             />
           </div>
 
@@ -225,6 +226,7 @@ export const AmiDashboard: React.FC<AmiDashboardProps> = ({
               <tr className="border-b border-zinc-200 bg-zinc-50 text-xs font-mono text-zinc-700">
                 <th className="py-3 px-4 font-medium uppercase tracking-wider">Image / Name</th>
                 <th className="py-3 px-4 font-medium uppercase tracking-wider">AMI ID</th>
+                <th className="py-3 px-4 font-medium uppercase tracking-wider">Owner ID</th>
                 <th className="py-3 px-4 font-medium uppercase tracking-wider">Region</th>
                 <th className="py-3 px-4 font-medium uppercase tracking-wider">Status</th>
                 <th className="py-3 px-4 font-medium uppercase tracking-wider">Created</th>
@@ -234,14 +236,14 @@ export const AmiDashboard: React.FC<AmiDashboardProps> = ({
             <tbody className="divide-y divide-zinc-200 text-xs font-mono">
               {loading && filteredImages.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-zinc-500">
+                  <td colSpan={7} className="py-12 text-center text-zinc-500">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-zinc-500" />
                     Loading AMIs from AWS EC2 and SQLite database...
                   </td>
                 </tr>
               ) : filteredImages.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-zinc-500">
+                  <td colSpan={7} className="py-12 text-center text-zinc-500">
                     <Server className="w-6 h-6 mx-auto mb-2 text-zinc-400" />
                     No VIB-created AMIs found in {region} or local database.
                     <p className="text-[11px] text-zinc-500 mt-1">
@@ -284,6 +286,29 @@ export const AmiDashboard: React.FC<AmiDashboardProps> = ({
                               title="Copy AMI ID"
                             >
                               {copiedId === img.ami_id ? (
+                                <Check className="w-3 h-3 text-zinc-950" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-zinc-400 text-[11px]">—</span>
+                        )}
+                      </td>
+
+                      {/* Owner ID */}
+                      <td className="py-3 px-4">
+                        {img.owner_id ? (
+                          <div className="inline-flex items-center gap-1.5 bg-zinc-50 border border-zinc-200 px-2 py-0.5 rounded text-zinc-700 shadow-2xs font-mono text-[11px]">
+                            <span>{img.owner_id}</span>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(img.owner_id!)}
+                              className="text-zinc-400 hover:text-zinc-950"
+                              title="Copy Owner ID"
+                            >
+                              {copiedId === img.owner_id ? (
                                 <Check className="w-3 h-3 text-zinc-950" />
                               ) : (
                                 <Copy className="w-3 h-3" />
@@ -524,6 +549,7 @@ export const AmiDashboard: React.FC<AmiDashboardProps> = ({
                 <div className="mt-2.5 p-2 rounded bg-zinc-50 border border-zinc-200 font-mono text-xs text-zinc-800">
                   <div>Name: <span className="text-zinc-950 font-medium">{deleteTarget.name}</span></div>
                   {deleteTarget.ami_id && <div>AMI: <span className="text-zinc-950 font-medium">{deleteTarget.ami_id}</span></div>}
+                  {deleteTarget.owner_id && <div>Owner: <span className="text-zinc-950 font-medium">{deleteTarget.owner_id}</span></div>}
                   <div>Region: <span className="text-zinc-950 font-medium">{deleteTarget.region || region}</span></div>
                 </div>
               </div>

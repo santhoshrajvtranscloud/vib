@@ -835,6 +835,7 @@ type ImageItem struct {
 	BuildID         string            `json:"build_id,omitempty"`
 	AMIID           string            `json:"ami_id"`
 	Name            string            `json:"name"`
+	OwnerID         string            `json:"owner_id,omitempty"`
 	Region          string            `json:"region"`
 	Status          string            `json:"status"`
 	CreationDate    string            `json:"creation_date"`
@@ -863,10 +864,14 @@ func (s *Server) handleListImages(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	var liveImages []vibaws.VIBImage
+	var defaultOwnerID string
 	if s.credManager != nil {
 		cfg, err := s.credManager.GetAWSConfig(ctx, region)
 		if err == nil {
 			liveImages, _ = vibaws.ListVIBImages(ctx, cfg, region)
+		}
+		if idInfo, err := s.credManager.VerifyIdentity(ctx, region); err == nil && idInfo.AccountID != "" {
+			defaultOwnerID = idInfo.AccountID
 		}
 	}
 
@@ -880,6 +885,7 @@ func (s *Server) handleListImages(w http.ResponseWriter, r *http.Request) {
 		item := ImageItem{
 			AMIID:        img.AMIID,
 			Name:         img.Name,
+			OwnerID:      img.OwnerID,
 			Region:       img.Region,
 			Status:       img.State,
 			CreationDate: img.CreationDate,
@@ -915,6 +921,7 @@ func (s *Server) handleListImages(w http.ResponseWriter, r *http.Request) {
 			BuildID:         b.BuildID,
 			AMIID:           displayID,
 			Name:            b.AMIName,
+			OwnerID:         defaultOwnerID,
 			Region:          b.Region,
 			Status:          b.Status,
 			CreationDate:    b.CreatedAt.Format(time.RFC3339),
