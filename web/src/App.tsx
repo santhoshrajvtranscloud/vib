@@ -23,7 +23,7 @@ const DEFAULT_CONFIG: BuildConfig = {
   ami_name: 'vib-ubuntu-app',
   region: 'ap-south-1',
   instance_type: 't3.micro',
-  source_ami: 'ami-0f58b397bc5c1f2e8',
+  source_ami: '',
   ssh_username: 'ubuntu',
   packages: ['nginx', 'docker'],
   custom_script: [],
@@ -48,7 +48,7 @@ export function App() {
   const [isAWSModalOpen, setIsAWSModalOpen] = useState(false)
   const [baseAMIs, setBaseAMIs] = useState<BaseAMI[]>([])
   const [baseAMIsLoading, setBaseAMIsLoading] = useState(true)
-  const [baseAMISource, setBaseAMISource] = useState<string>('fallback_preset')
+  const [baseAMISource, setBaseAMISource] = useState<string>('not_connected')
   const [architecture, setArchitecture] = useState<'x86_64' | 'arm64'>('x86_64')
   const [activeTab, setActiveTab] = useState<'builder' | 'amis'>('builder')
   const [isSyncingToForm, setIsSyncingToForm] = useState(false)
@@ -177,8 +177,22 @@ export function App() {
       const res = await apiFetch(`/api/aws/base-amis?region=${region}&arch=${arch}`)
       if (!res.ok) throw new Error('Failed to fetch base AMIs')
       const data: BaseAMIResponse = await res.json()
-      setBaseAMIs(data.images || [])
+      const imgs = data.images || []
+      setBaseAMIs(imgs)
       setBaseAMISource(data.source)
+      if (imgs.length > 0) {
+        setConfig((prev) => {
+          // If no source AMI selected, select the first live discovered AMI
+          if (!prev.source_ami) {
+            return {
+              ...prev,
+              source_ami: imgs[0].id,
+              ssh_username: imgs[0].default_user,
+            }
+          }
+          return prev
+        })
+      }
     } catch (err) {
       console.warn('Base AMI discovery notice:', err)
     } finally {

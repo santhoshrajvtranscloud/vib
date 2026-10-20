@@ -402,13 +402,23 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
               </span>
             ) : (
               <span className="text-[10px] font-mono text-zinc-600 border border-zinc-200 bg-white px-1.5 py-0.5 rounded shadow-2xs">
-                {baseAMISource === 'aws_live' ? 'Live EC2' : 'Curated Preset'}
+                {baseAMISource === 'aws_live' ? 'Live EC2 (Packer Filter)' : 'Disconnected'}
               </span>
             )}
           </div>
 
           {/* Base AMI Cards */}
           <div className="space-y-2">
+            {!baseAMIsLoading && baseAMIs.length === 0 && (
+              <div className="p-3.5 rounded-md border border-zinc-200 bg-white text-xs text-zinc-600 space-y-1.5 shadow-2xs">
+                <p className="font-medium text-zinc-900">
+                  No Base AMIs loaded from AWS EC2
+                </p>
+                <p className="text-[11px] text-zinc-500 leading-relaxed">
+                  Connect your AWS credentials to query official base AMIs live via EC2 DescribeImages (Packer <code className="font-mono text-zinc-700">source_ami_filter</code> method), or enter a custom AMI ID below.
+                </p>
+              </div>
+            )}
             {baseAMIs.map((ami) => {
               const isSelected = config.source_ami === ami.id
 

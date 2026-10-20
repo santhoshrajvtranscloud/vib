@@ -87,7 +87,7 @@ func TestListOfficialBaseAMIsWithMockClient(t *testing.T) {
 		t.Fatalf("expected 4 images, got %d", len(res.Images))
 	}
 
-	// Verify Ubuntu 24 selected newest creation date
+	// Verify Ubuntu 24 selected newest creation date (Packer most_recent = true)
 	foundU24 := false
 	for _, img := range res.Images {
 		if img.OS == "ubuntu-24.04" {
@@ -113,12 +113,12 @@ func TestListOfficialBaseAMIsWithMockClient(t *testing.T) {
 	}
 }
 
-func TestCuratedPresetsFallback(t *testing.T) {
+func TestUnauthenticatedReturnsCleanError(t *testing.T) {
 	ClearAMICache()
 
-	// When client returns an error, fallback presets are returned
+	// When client returns an error (e.g. unauthenticated), it returns not_connected without hardcoded fallback AMIs
 	mockClient := &mockEC2Client{
-		err: errors.New("UnauthorizedOperation"),
+		err: errors.New("UnauthorizedOperation: You are not authorized to perform this operation"),
 	}
 
 	ctx := context.Background()
@@ -127,34 +127,22 @@ func TestCuratedPresetsFallback(t *testing.T) {
 		t.Fatalf("expected error from client, got nil")
 	}
 
-	fallback := GetCuratedPresets("us-east-1", "x86_64")
-	if fallback.Source != "fallback_preset" {
-		t.Errorf("expected fallback_preset, got %q", fallback.Source)
+	cfg := aws.Config{}
+	res := ListOfficialBaseAMIs(ctx, cfg, "us-east-1", "x86_64")
+	if res.Source != "not_connected" {
+		t.Errorf("expected not_connected, got %q", res.Source)
 	}
-	if len(fallback.Images) != 4 {
-		t.Fatalf("expected 4 fallback images, got %d", len(fallback.Images))
+	if len(res.Images) != 0 {
+		t.Errorf("expected 0 images when unauthenticated, got %d", len(res.Images))
 	}
-
-	var u22 BaseAMI
-	for _, img := range fallback.Images {
-		if img.OS == "ubuntu-22.04" {
-			u22 = img
-		}
-	}
-	if u22.ID != "ami-0c7217cdde317cfec" {
-		t.Errorf("expected us-east-1 ubuntu-22.04 ami-0c7217cdde317cfec, got %q", u22.ID)
+	if res.Error == "" {
+		t.Errorf("expected error message when unauthenticated, got empty string")
 	}
 }
 
 func TestCacheOperation(t *testing.T) {
 	ClearAMICache()
 	cfg := aws.Config{}
-
-	// First call uses presets (since cfg is unauthenticated)
-	res1 := ListOfficialBaseAMIs(context.Background(), cfg, "eu-west-1", "x86_64")
-	if res1.Source != "fallback_preset" {
-		t.Errorf("expected fallback_preset, got %q", res1.Source)
-	}
 
 	// Manually inject cache entry to test cache hit
 	amiCacheMu.Lock()

@@ -12,7 +12,7 @@ import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
-// BaseAMI represents a discovered or preset AWS official base machine image.
+// BaseAMI represents an official base machine image discovered live from AWS EC2.
 type BaseAMI struct {
 	ID           string `json:"id"`
 	Name         string `json:"name"`
@@ -30,16 +30,17 @@ type BaseAMI struct {
 type BaseAMIResponse struct {
 	Region string    `json:"region"`
 	Arch   string    `json:"arch"`
-	Source string    `json:"source"` // "aws_live" or "fallback_preset"
+	Source string    `json:"source"` // "aws_live" or "not_connected"
 	Images []BaseAMI `json:"images"`
+	Error  string    `json:"error,omitempty"`
 }
 
-// EC2DescribeImagesAPI abstracts the EC2 DescribeImages call for testing.
+// EC2DescribeImagesAPI abstracts the EC2 DescribeImages call for testing and dependency injection.
 type EC2DescribeImagesAPI interface {
 	DescribeImages(ctx context.Context, params *ec2.DescribeImagesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeImagesOutput, error)
 }
 
-// AMI query specification
+// amiQuerySpec models the exact query filters used by Packer's source_ami_filter block.
 type amiQuerySpec struct {
 	OS          string
 	Family      string
@@ -50,6 +51,8 @@ type amiQuerySpec struct {
 	Description string
 }
 
+// getQuerySpecs defines official vendor account IDs and release name patterns.
+// These match the official patterns used by HashiCorp Packer and Terraform.
 func getQuerySpecs(arch string) []amiQuerySpec {
 	if arch != "arm64" {
 		arch = "x86_64"
@@ -65,7 +68,7 @@ func getQuerySpecs(arch string) []amiQuerySpec {
 			OS:          "ubuntu-24.04",
 			Family:      "Ubuntu",
 			DisplayName: "Ubuntu 24.04 LTS (Noble Numbat)",
-			OwnerID:     "099720109477",
+			OwnerID:     "099720109477", // Canonical official AWS account
 			NamePattern: fmt.Sprintf("ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-%s-server-*", ubuntuArch),
 			DefaultUser: "ubuntu",
 			Description: "Canonical Ubuntu 24.04 LTS with Linux 6.8 kernel and systemd",
@@ -74,7 +77,7 @@ func getQuerySpecs(arch string) []amiQuerySpec {
 			OS:          "ubuntu-22.04",
 			Family:      "Ubuntu",
 			DisplayName: "Ubuntu 22.04 LTS (Jammy Jellyfish)",
-			OwnerID:     "099720109477",
+			OwnerID:     "099720109477", // Canonical official AWS account
 			NamePattern: fmt.Sprintf("ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-%s-server-*", ubuntuArch),
 			DefaultUser: "ubuntu",
 			Description: "Canonical Ubuntu 22.04 LTS with Linux 5.15 kernel and systemd",
@@ -83,16 +86,16 @@ func getQuerySpecs(arch string) []amiQuerySpec {
 			OS:          "amazon-linux-2023",
 			Family:      "Amazon Linux",
 			DisplayName: "Amazon Linux 2023",
-			OwnerID:     "137112412989",
+			OwnerID:     "137112412989", // Amazon official AWS account
 			NamePattern: fmt.Sprintf("al2023-ami-2023.*-kernel-6.1-%s", arch),
 			DefaultUser: "ec2-user",
-			Description: "Amazon Linux 2023 optimized for AWS infrastructure",
+			Description: "Amazon Linux 2023 optimized for AWS EC2 infrastructure",
 		},
 		{
 			OS:          "debian-12",
 			Family:      "Debian",
 			DisplayName: "Debian 12 (Bookworm)",
-			OwnerID:     "136693071363",
+			OwnerID:     "136693071363", // Debian official AWS account
 			NamePattern: fmt.Sprintf("debian-12-%s-*", ubuntuArch),
 			DefaultUser: "admin",
 			Description: "Official Debian 12 cloud image for AWS",
@@ -100,7 +103,7 @@ func getQuerySpecs(arch string) []amiQuerySpec {
 	}
 }
 
-// In-memory 15-minute cache
+// In-memory 15-minute cache to avoid rate-limiting DescribeImages on rapid UI navigation
 type cacheEntry struct {
 	response  BaseAMIResponse
 	expiresAt time.Time
@@ -112,8 +115,9 @@ var (
 	cacheTTL   = 15 * time.Minute
 )
 
-// ListOfficialBaseAMIs fetches the latest official AMIs for the given region and architecture.
-// Uses in-memory cache, queries EC2 DescribeImages if connected, and falls back to curated presets.
+// ListOfficialBaseAMIs queries AWS EC2 DescribeImages live using the Packer source_ami_filter method.
+// Results are cached for 15 minutes per region/architecture.
+// If unauthenticated or AWS returns an error, it returns an explicit error response with zero hardcoded IDs.
 func ListOfficialBaseAMIs(ctx context.Context, cfg aws.Config, region, arch string) BaseAMIResponse {
 	if region == "" {
 		region = "ap-south-1"
@@ -130,7 +134,7 @@ func ListOfficialBaseAMIs(ctx context.Context, cfg aws.Config, region, arch stri
 	}
 	amiCacheMu.RUnlock()
 
-	// Attempt live AWS EC2 query
+	// Query live AWS EC2 via official AWS SDK v2
 	client := ec2.NewFromConfig(cfg)
 	res, err := ListOfficialBaseAMIsWithClient(ctx, client, region, arch)
 	if err == nil && len(res.Images) > 0 {
@@ -144,12 +148,29 @@ func ListOfficialBaseAMIs(ctx context.Context, cfg aws.Config, region, arch stri
 		return res
 	}
 
-	// Fallback to curated presets
-	fallback := GetCuratedPresets(region, arch)
-	return fallback
+	errMsg := "AWS credentials not configured or EC2 DescribeImages failed"
+	if err != nil {
+		errMsg = err.Error()
+	}
+
+	return BaseAMIResponse{
+		Region: region,
+		Arch:   arch,
+		Source: "not_connected",
+		Images: []BaseAMI{},
+		Error:  errMsg,
+	}
 }
 
-// ListOfficialBaseAMIsWithClient executes DescribeImages queries against the provided EC2 API.
+// ListOfficialBaseAMIsWithClient executes DescribeImages queries using the exact same filters
+// and sorting mechanism that HashiCorp Packer's source_ami_filter builder uses:
+// - Owners: Official vendor account IDs
+// - Filters:
+//   - name: Glob pattern (e.g., ubuntu-noble-24.04-amd64-server-*)
+//   - root-device-type: ebs
+//   - virtualization-type: hvm
+//   - state: available
+// - Most Recent: Sort by CreationDate descending to select the latest release
 func ListOfficialBaseAMIsWithClient(ctx context.Context, client EC2DescribeImagesAPI, region, arch string) (BaseAMIResponse, error) {
 	specs := getQuerySpecs(arch)
 	var discovered []BaseAMI
@@ -161,6 +182,14 @@ func ListOfficialBaseAMIsWithClient(ctx context.Context, client EC2DescribeImage
 				{
 					Name:   aws.String("name"),
 					Values: []string{spec.NamePattern},
+				},
+				{
+					Name:   aws.String("root-device-type"),
+					Values: []string{"ebs"},
+				},
+				{
+					Name:   aws.String("virtualization-type"),
+					Values: []string{"hvm"},
 				},
 				{
 					Name:   aws.String("state"),
@@ -178,7 +207,7 @@ func ListOfficialBaseAMIsWithClient(ctx context.Context, client EC2DescribeImage
 			continue
 		}
 
-		// Sort by CreationDate descending
+		// Sort by CreationDate descending (identical to Packer's most_recent = true)
 		sort.Slice(output.Images, func(i, j int) bool {
 			dateI := aws.ToString(output.Images[i].CreationDate)
 			dateJ := aws.ToString(output.Images[j].CreationDate)
@@ -201,7 +230,7 @@ func ListOfficialBaseAMIsWithClient(ctx context.Context, client EC2DescribeImage
 	}
 
 	if len(discovered) == 0 {
-		return BaseAMIResponse{}, fmt.Errorf("no official AMIs discovered for %s %s", region, arch)
+		return BaseAMIResponse{}, fmt.Errorf("no official AMIs found in %s matching Packer filters for %s", region, arch)
 	}
 
 	return BaseAMIResponse{
@@ -210,91 +239,6 @@ func ListOfficialBaseAMIsWithClient(ctx context.Context, client EC2DescribeImage
 		Source: "aws_live",
 		Images: discovered,
 	}, nil
-}
-
-// GetCuratedPresets returns high-confidence official AMIs for common AWS regions when offline or unauthenticated.
-func GetCuratedPresets(region, arch string) BaseAMIResponse {
-	if region == "" {
-		region = "ap-south-1"
-	}
-	if arch == "" {
-		arch = "x86_64"
-	}
-
-	presetsByRegion := map[string]map[string]string{
-		"ap-south-1": {
-			"ubuntu-24.04":      "ami-0dee22c13ea7a9a67",
-			"ubuntu-22.04":      "ami-0f58b397bc5c1f2e8",
-			"amazon-linux-2023": "ami-03f4878e83fedf440",
-			"debian-12":         "ami-04149021e102213e4",
-		},
-		"us-east-1": {
-			"ubuntu-24.04":      "ami-04b70fa74e45c3917",
-			"ubuntu-22.04":      "ami-0c7217cdde317cfec",
-			"amazon-linux-2023": "ami-0440d3b780d96b29d",
-			"debian-12":         "ami-06db4d78cb1d3bbf9",
-		},
-		"us-west-2": {
-			"ubuntu-24.04":      "ami-07d9cf938edb0739b",
-			"ubuntu-22.04":      "ami-03f65b8614a860c29",
-			"amazon-linux-2023": "ami-00448a337e32a6774",
-			"debian-12":         "ami-08a52ddb321b32a8c",
-		},
-		"eu-west-1": {
-			"ubuntu-24.04":      "ami-0c1c30f31d2ae7aa7",
-			"ubuntu-22.04":      "ami-0694d931cee176e7d",
-			"amazon-linux-2023": "ami-0c956e207f9d113d5",
-			"debian-12":         "ami-07b1a20a77196a600",
-		},
-		"eu-central-1": {
-			"ubuntu-24.04":      "ami-0084a47cc718c111a",
-			"ubuntu-22.04":      "ami-04e601abe3e1a910f",
-			"amazon-linux-2023": "ami-026c3177c9ad54336",
-			"debian-12":         "ami-0782e4e1a72d73501",
-		},
-		"ap-southeast-1": {
-			"ubuntu-24.04":      "ami-060e277c0d4cce553",
-			"ubuntu-22.04":      "ami-0df7a207adb9748c7",
-			"amazon-linux-2023": "ami-07a6f8f647e8f2713",
-			"debian-12":         "ami-0329b3bb887964b49",
-		},
-	}
-
-	regMap, exists := presetsByRegion[region]
-	if !exists {
-		// Fallback to ap-south-1 if region is unlisted
-		regMap = presetsByRegion["ap-south-1"]
-	}
-
-	specs := getQuerySpecs(arch)
-	images := make([]BaseAMI, 0, len(specs))
-
-	for _, s := range specs {
-		amiID := regMap[s.OS]
-		if amiID == "" {
-			amiID = "ami-0f58b397bc5c1f2e8"
-		}
-
-		images = append(images, BaseAMI{
-			ID:           amiID,
-			Name:         s.NamePattern,
-			DisplayName:  s.DisplayName,
-			OS:           s.OS,
-			Family:       s.Family,
-			Architecture: arch,
-			DefaultUser:  s.DefaultUser,
-			CreationDate: "2024-04-01T00:00:00.000Z",
-			Description:  s.Description + " (curated fallback preset)",
-			OwnerID:      s.OwnerID,
-		})
-	}
-
-	return BaseAMIResponse{
-		Region: region,
-		Arch:   arch,
-		Source: "fallback_preset",
-		Images: images,
-	}
 }
 
 // ClearAMICache clears the in-memory AMI cache.

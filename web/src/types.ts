@@ -114,8 +114,9 @@ export interface BaseAMI {
 export interface BaseAMIResponse {
   region: string
   arch: string
-  source: 'aws_live' | 'fallback_preset'
+  source: 'aws_live' | 'not_connected' | string
   images: BaseAMI[]
+  error?: string
 }
 
 export interface VIBImageItem {
