@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/santhosh/vib/schemas/build-config.schema.json",
+  "title": "BuildConfig",
+  "description": "Configuration specification for VIB (Visual Image Builder) AWS AMI builds",
+  "type": "object",
+  "properties": {
+    "build_id": {
+      "type": "string",
+      "description": "Unique identifier for the build"
+    },
+    "region": {
+      "type": "string",
+      "description": "Target AWS region (e.g. ap-south-1, us-east-1)"
+    },
+    "instance_type": {
+      "type": "string",
+      "description": "EC2 instance type used during building (e.g. t3.micro)"
+    },
+    "source_ami": {
+      "type": "string",
+      "pattern": "^ami-[a-z0-9]{8,17}$",
+      "description": "Base Amazon Machine Image ID starting with 'ami-'"
+    },
+    "ssh_username": {
+      "type": "string",
+      "default": "ubuntu",
+      "description": "SSH username to authenticate against source AMI"
+    },
+    "ami_name": {
+      "type": "string",
+      "description": "Base name for the generated AMI"
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of catalog packages or apt packages to install (e.g. nginx, docker, git)"
+    },
+    "custom_script": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Optional list of custom shell commands to execute"
+    }
+  },
+  "required": [
+    "region",
+    "instance_type",
+    "source_ami",
+    "ami_name"
+  ],
+  "additionalProperties": false
+}
