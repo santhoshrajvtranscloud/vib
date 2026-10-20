@@ -483,9 +483,10 @@ func (s *Server) handleCreateBuild(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	summary := build.StatusSummary()
 	writeJSON(w, http.StatusAccepted, map[string]interface{}{
-		"build_id": build.ID,
-		"status":   build.Status,
+		"build_id": summary.BuildID,
+		"status":   summary.Status,
 	})
 }
 
@@ -1059,6 +1060,12 @@ func (b *Build) finish(result *packer.BuildResult, err error) {
 	} else {
 		b.Status = "success"
 	}
+}
+
+// signalDone closes the done channel to signal waiters that build and persistence are finished.
+func (b *Build) signalDone() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 
 	select {
 	case <-b.done:
@@ -1179,20 +1186,29 @@ func (bm *BuildManager) runBuild(ctx context.Context, build *Build) {
 
 	// Update SQLite store with final outcome
 	if bm.store != nil {
+		build.mu.RLock()
 		var sb strings.Builder
 		for _, l := range build.Logs {
 			sb.WriteString(l.Message)
 			sb.WriteString("\n")
 		}
+		status := build.Status
+		amiID := build.AMIID
+		errMsg := build.Error
+		durationSec := int(build.Duration.Seconds())
+		build.mu.RUnlock()
+
 		_ = bm.store.UpdateBuildStatus(
 			build.ID,
-			build.Status,
-			build.AMIID,
+			status,
+			amiID,
 			sb.String(),
-			build.Error,
-			int(build.Duration.Seconds()),
+			errMsg,
+			durationSec,
 		)
 	}
+
+	build.signalDone()
 }
 
 // GetBuild retrieves a build by ID.

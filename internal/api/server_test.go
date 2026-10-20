@@ -805,3 +805,357 @@ build {
 		}
 	})
 }
+
+func TestHandleHCLGenerate_ValidationErrors(t *testing.T) {
+	server := NewServer(packer.NewRunner(""))
+
+	tests := []struct {
+		name       string
+		payload    string
+		wantStatus int
+	}{
+		{"Invalid JSON", `{"region": "ap-south-1",`, http.StatusBadRequest},
+		{"Empty Object", `{}`, http.StatusBadRequest},
+		{"Missing AMI Name", `{"region":"ap-south-1","instance_type":"t3.micro","source_ami":"ami-12345"}`, http.StatusBadRequest},
+		{"Path Traversal AMI Name", `{"region":"ap-south-1","instance_type":"t3.micro","source_ami":"ami-12345","ami_name":"../../etc/passwd"}`, http.StatusBadRequest},
+		{"Invalid Region", `{"region":"invalid-region-99","instance_type":"t3.micro","source_ami":"ami-12345","ami_name":"valid-name"}`, http.StatusBadRequest},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/hcl/generate", strings.NewReader(tc.payload))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			server.Routes().ServeHTTP(w, req)
+
+			if w.Code != tc.wantStatus {
+				t.Errorf("expected status %d, got %d (body: %s)", tc.wantStatus, w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestHandleHCLValidate_EdgeCases(t *testing.T) {
+	server := NewServer(packer.NewRunner(""))
+
+	t.Run("Invalid JSON", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/hcl/validate", strings.NewReader(`{invalid}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", w.Code)
+		}
+	})
+
+	t.Run("Empty HCL", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/hcl/validate", strings.NewReader(`{"hcl":"   "}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", w.Code)
+		}
+	})
+}
+
+func TestHandleBuild_NotFoundAndEdgeCases(t *testing.T) {
+	server := NewServer(packer.NewRunner(""))
+
+	t.Run("Get Nonexistent Build", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/builds/nonexistent-123", nil)
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("expected 404, got %d", w.Code)
+		}
+	})
+
+	t.Run("Cancel Nonexistent Build", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/builds/nonexistent-123/cancel", nil)
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("expected 404, got %d", w.Code)
+		}
+	})
+
+	t.Run("Stream Nonexistent Build", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/builds/nonexistent-123/stream", nil)
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("expected 404, got %d", w.Code)
+		}
+	})
+
+	t.Run("Create Build Invalid JSON", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/builds", strings.NewReader(`{bad json`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", w.Code)
+		}
+	})
+}
+
+func TestHandleAWSCredentials_ValidationAndAccessors(t *testing.T) {
+	credMgr, err := vibaws.NewCredentialManager(t.TempDir())
+	if err != nil {
+		t.Fatalf("failed to init credMgr: %v", err)
+	}
+
+	dbStore, err := vibstore.NewDB(":memory:")
+	if err != nil {
+		t.Fatalf("failed to init dbStore: %v", err)
+	}
+	defer dbStore.Close()
+
+	server := NewServer(packer.NewRunner(""), credMgr, dbStore)
+
+	// Verify getters
+	if server.CredentialManager() != credMgr {
+		t.Errorf("server.CredentialManager() returned unexpected pointer")
+	}
+	if server.Store() != dbStore {
+		t.Errorf("server.Store() returned unexpected pointer")
+	}
+
+	t.Run("Invalid JSON", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/aws/credentials", strings.NewReader(`{invalid`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", w.Code)
+		}
+	})
+
+	t.Run("Missing Access Key", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/aws/credentials", strings.NewReader(`{"secret_access_key":"secret"}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", w.Code)
+		}
+	})
+
+	t.Run("Clear Credentials", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/api/aws/credentials", nil)
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", w.Code)
+		}
+	})
+}
+
+func TestCORSMiddleware_Origins(t *testing.T) {
+	server := NewServer(packer.NewRunner(""))
+
+	t.Run("Allowed Origin on GET", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+		req.Header.Set("Origin", "http://localhost:5173")
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", w.Code)
+		}
+		if got := w.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:5173" {
+			t.Errorf("expected allow origin http://localhost:5173, got %q", got)
+		}
+	})
+
+	t.Run("OPTIONS Preflight", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodOptions, "/api/hcl/generate", nil)
+		req.Header.Set("Origin", "http://localhost:5173")
+		req.Header.Set("Access-Control-Request-Method", "POST")
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+
+		if w.Code != http.StatusNoContent {
+			t.Errorf("expected 204 No Content for OPTIONS, got %d", w.Code)
+		}
+	})
+
+	t.Run("Disallowed Origin on POST", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/hcl/generate", strings.NewReader("{}"))
+		req.Header.Set("Origin", "https://attacker-domain.evil")
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+
+		if w.Code != http.StatusForbidden {
+			t.Errorf("expected 403 Forbidden for external origin POST, got %d", w.Code)
+		}
+	})
+}
+
+func TestHandleImages_StoreEdgeCases(t *testing.T) {
+	// Server with no store
+	serverNoStore := NewServer(packer.NewRunner(""))
+
+	t.Run("List Images Without Store", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/images", nil)
+		w := httptest.NewRecorder()
+		serverNoStore.Routes().ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", w.Code)
+		}
+	})
+
+	t.Run("Get Image Config Nonexistent", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/images/ami-123/config", nil)
+		w := httptest.NewRecorder()
+		serverNoStore.Routes().ServeHTTP(w, req)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("expected 404, got %d", w.Code)
+		}
+	})
+
+	t.Run("Delete Image Without Store", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/api/images/ami-123", nil)
+		w := httptest.NewRecorder()
+		serverNoStore.Routes().ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", w.Code)
+		}
+	})
+
+	// Server with store but image not found
+	dbStore, err := vibstore.NewDB(":memory:")
+	if err != nil {
+		t.Fatalf("failed to init dbStore: %v", err)
+	}
+	defer dbStore.Close()
+
+	serverWithStore := NewServer(packer.NewRunner(""), dbStore)
+
+	t.Run("Get Image Config Not Found", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/images/ami-nonexistent/config", nil)
+		w := httptest.NewRecorder()
+		serverWithStore.Routes().ServeHTTP(w, req)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("expected 404, got %d", w.Code)
+		}
+	})
+}
+
+func TestHandleHCLGenerate_WrappedConfig(t *testing.T) {
+	server := NewServer(packer.NewRunner(""))
+
+	payload := `{
+		"config": {
+			"region": "ap-south-1",
+			"instance_type": "t3.micro",
+			"source_ami": "ami-0f58b397bc5c1f2e8",
+			"ssh_username": "ubuntu",
+			"ami_name": "wrapped-test",
+			"packages": ["docker"]
+		}
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/api/hcl/generate", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	server.Routes().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleCreateBuild_Variants(t *testing.T) {
+	runner := packer.NewRunner(createMockPacker(t))
+	server := NewServer(runner)
+
+	t.Run("Empty Body", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/builds", strings.NewReader("   "))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", w.Code)
+		}
+	})
+
+	t.Run("Invalid Config Field", func(t *testing.T) {
+		payload := `{"config": {"region": "invalid-region"}}`
+		req := httptest.NewRequest(http.MethodPost, "/api/builds", strings.NewReader(payload))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", w.Code)
+		}
+	})
+
+	t.Run("Direct BuildConfig Without Wrapper", func(t *testing.T) {
+		payload := `{
+			"region": "ap-south-1",
+			"instance_type": "t3.micro",
+			"source_ami": "ami-0f58b397bc5c1f2e8",
+			"ssh_username": "ubuntu",
+			"ami_name": "direct-config-test"
+		}`
+		req := httptest.NewRequest(http.MethodPost, "/api/builds", strings.NewReader(payload))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+		if w.Code != http.StatusAccepted {
+			t.Errorf("expected 202 Accepted, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+func TestHandleStatic_Serving(t *testing.T) {
+	server := NewServer(packer.NewRunner(""))
+
+	tmpDir := t.TempDir()
+	indexHTML := "<html><body><h1>VIB UI</h1></body></html>"
+	testCSS := "body { background: black; }"
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "index.html"), []byte(indexHTML), 0644); err != nil {
+		t.Fatalf("failed to write index.html: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "style.css"), []byte(testCSS), 0644); err != nil {
+		t.Fatalf("failed to write style.css: %v", err)
+	}
+
+	handler := server.handleStatic(http.Dir(tmpDir), false)
+
+	t.Run("Serve Static File", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/style.css", nil)
+		w := httptest.NewRecorder()
+		handler(w, req)
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", w.Code)
+		}
+		if !strings.Contains(w.Body.String(), "background: black") {
+			t.Errorf("unexpected content: %s", w.Body.String())
+		}
+	})
+
+	t.Run("Serve SPA Fallback", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/dashboard/custom/view", nil)
+		w := httptest.NewRecorder()
+		handler(w, req)
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", w.Code)
+		}
+		if !strings.Contains(w.Body.String(), "<h1>VIB UI</h1>") {
+			t.Errorf("unexpected content: %s", w.Body.String())
+		}
+	})
+
+	t.Run("API Path 404", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/unknown-endpoint", nil)
+		w := httptest.NewRecorder()
+		handler(w, req)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("expected 404 for /api, got %d", w.Code)
+		}
+	})
+}
