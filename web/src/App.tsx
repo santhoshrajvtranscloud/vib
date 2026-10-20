@@ -1,4 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import {
+  Layers,
+  Database,
+  ShieldCheck,
+  RefreshCw,
+} from 'lucide-react'
 import { Header } from './components/Header'
 import { VisualBuilder } from './components/VisualBuilder'
 import { HclEditor } from './components/HclEditor'
@@ -42,6 +48,11 @@ export function App() {
   const [currentBuild, setCurrentBuild] = useState<BuildStatusSummary | null>(null)
   const [isValidating, setIsValidating] = useState(false)
   const [isPreflighting, setIsPreflighting] = useState(false)
+  const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(false)
+
+  // Recent Builds State
+  const [recentBuilds, setRecentBuilds] = useState<BuildStatusSummary[]>([])
+  const [recentBuildsLoading, setRecentBuildsLoading] = useState(false)
 
   // AWS Integration States
   const [awsStatus, setAwsStatus] = useState<AWSIdentityInfo | null>(null)
@@ -59,6 +70,22 @@ export function App() {
 
   const activeEventSourceRef = useRef<EventSource | null>(null)
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Fetch recent builds list
+  const fetchRecentBuilds = useCallback(async () => {
+    try {
+      setRecentBuildsLoading(true)
+      const res = await apiFetch('/api/builds')
+      if (res.ok) {
+        const data = await res.json()
+        setRecentBuilds(data.builds || [])
+      }
+    } catch (err) {
+      console.warn('Failed to fetch recent builds:', err)
+    } finally {
+      setRecentBuildsLoading(false)
+    }
+  }, [])
 
   // Connect to SSE stream
   const connectSSE = useCallback((buildId: string) => {
@@ -82,6 +109,7 @@ export function App() {
       try {
         const statusSummary: BuildStatusSummary = JSON.parse(event.data)
         setCurrentBuild(statusSummary)
+        fetchRecentBuilds()
         es.close()
       } catch (err) {
         console.error('Failed to parse SSE status event:', err)
@@ -91,7 +119,16 @@ export function App() {
     es.onerror = () => {
       es.close()
     }
-  }, [])
+  }, [fetchRecentBuilds])
+
+  // Select build from sidebar
+  const handleSelectBuild = (b: BuildStatusSummary) => {
+    setCurrentBuild(b)
+    setLogs([])
+    connectSSE(b.build_id)
+    setIsTerminalCollapsed(false)
+    setActiveTab('builder')
+  }
 
   // 1. Fetch Health, Catalogue, and AWS Status on Mount
   const fetchAWSStatus = useCallback(async () => {
@@ -143,6 +180,7 @@ export function App() {
         if (res.ok) {
           const data = await res.json()
           const builds: BuildStatusSummary[] = data.builds || []
+          setRecentBuilds(builds)
           const running = builds.find(
             (b) => b.status === 'running' || b.status === 'pending'
           )
@@ -182,7 +220,6 @@ export function App() {
       setBaseAMISource(data.source)
       if (imgs.length > 0) {
         setConfig((prev) => {
-          // If no source AMI selected, select the first live discovered AMI
           if (!prev.source_ami) {
             return {
               ...prev,
@@ -302,6 +339,7 @@ export function App() {
   // 6. Validate HCL
   const handleValidate = async () => {
     setIsValidating(true)
+    setIsTerminalCollapsed(false)
     const startMsg: LogEntry = {
       timestamp: new Date().toISOString(),
       stream: 'system',
@@ -357,6 +395,7 @@ export function App() {
   // 6b. Run AWS Pre-Flight Readiness Check
   const handlePreflightCheck = async () => {
     setIsPreflighting(true)
+    setIsTerminalCollapsed(false)
     setActiveTab('builder')
 
     const startMsg: LogEntry = {
@@ -413,6 +452,8 @@ export function App() {
 
   // 7. Start Build
   const handleBuild = async () => {
+    setIsTerminalCollapsed(false)
+    setActiveTab('builder')
     setLogs([
       {
         timestamp: new Date().toISOString(),
@@ -446,12 +487,14 @@ export function App() {
       const data = await res.json()
       const newBuild: BuildStatusSummary = {
         build_id: data.build_id,
+        ami_name: config.ami_name,
+        region: config.region,
         status: data.status || 'running',
         duration_ms: 0,
       }
       setCurrentBuild(newBuild)
-
       connectSSE(data.build_id)
+      fetchRecentBuilds()
     } catch (err) {
       setLogs((prev) => [
         ...prev,
@@ -523,7 +566,6 @@ export function App() {
 
     const identity: AWSIdentityInfo = await res.json()
     setAwsStatus(identity)
-    // Refetch base AMIs with new live credentials
     fetchBaseAMIs(config.region, architecture)
   }
 
@@ -563,82 +605,221 @@ export function App() {
   }, [])
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-white text-zinc-950">
-      {/* Header */}
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-white text-zinc-950 font-sans">
+      {/* Top Console Bar (Header) */}
       <Header
+        region={config.region}
+        onRegionChange={(newRegion) => {
+          setConfig((prev) => ({ ...prev, region: newRegion }))
+        }}
+        awsStatus={awsStatus}
+        onOpenAWSModal={() => setIsAWSModalOpen(true)}
         health={health}
         healthLoading={healthLoading}
         healthError={healthError}
         currentBuild={currentBuild}
-        awsStatus={awsStatus}
-        onOpenAWSModal={() => setIsAWSModalOpen(true)}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
       />
 
-      {/* Main Content Area */}
-      {activeTab === 'builder' ? (
-        /* Split-Screen Visual Builder & Code Terminal Workspace */
-        <div className="flex-1 flex overflow-hidden">
-          {/* Left Panel: Visual Builder Form */}
-          <div className="w-[440px] shrink-0 h-full overflow-hidden flex flex-col bg-zinc-50 border-r border-zinc-200">
-            <VisualBuilder
-              config={config}
-              onChange={setConfig}
-              catalogue={catalogue}
-              catalogueLoading={catalogueLoading}
-              isManualMode={isManualMode}
-              onResetToForm={handleResetToForm}
-              baseAMIs={baseAMIs}
-              baseAMIsLoading={baseAMIsLoading}
-              baseAMISource={baseAMISource}
-              architecture={architecture}
-              onArchChange={(arch) => setArchitecture(arch as 'x86_64' | 'arm64')}
-            />
-          </div>
+      {/* Main Container: Left Sidebar Navigation + Active Tab Canvas */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Sidebar Navigation */}
+        <aside className="w-56 shrink-0 bg-white border-r border-zinc-200 flex flex-col justify-between select-none">
+          {/* Top: App Navigation & Recent Builds */}
+          <div className="p-3 space-y-4 overflow-y-auto">
+            <div>
+              <div className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">
+                Services
+              </div>
+              <nav className="space-y-0.5">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('builder')}
+                  className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs transition-colors ${
+                    activeTab === 'builder'
+                      ? 'bg-zinc-100 text-zinc-950 font-semibold'
+                      : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-50'
+                  }`}
+                >
+                  <Layers className="w-4 h-4 text-zinc-500" />
+                  <span>Image Builder</span>
+                </button>
 
-          {/* Right Panel: Split into Monaco Editor (Top) & Live Logs Terminal (Bottom) */}
-          <div className="flex-1 flex flex-col h-full overflow-hidden border-l border-zinc-200 bg-white">
-            {/* Top Half: Monaco HCL Editor */}
-            <div className="flex-1 min-h-[280px] overflow-hidden bg-white">
-              <HclEditor
-                hclCode={hclCode}
-                onChange={handleEditorChange}
-                isManualMode={isManualMode}
-                onResetToForm={handleResetToForm}
-                onValidate={handleValidate}
-                isValidating={isValidating}
-                onPreflight={handlePreflightCheck}
-                isPreflighting={isPreflighting}
-                onBuild={handleBuild}
-                onCancel={handleCancel}
-                currentBuild={currentBuild}
-                onSyncToForm={handleSyncToForm}
-                isSyncingToForm={isSyncingToForm}
-                syncNotification={syncNotification}
-                onClearNotification={() => setSyncNotification(null)}
-              />
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('amis')}
+                  className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs transition-colors ${
+                    activeTab === 'amis'
+                      ? 'bg-zinc-100 text-zinc-950 font-semibold'
+                      : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-50'
+                  }`}
+                >
+                  <Database className="w-4 h-4 text-zinc-500" />
+                  <span>AMIs & History</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsAWSModalOpen(true)}
+                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-md text-xs text-zinc-600 hover:text-zinc-950 hover:bg-zinc-50 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <ShieldCheck className="w-4 h-4 text-zinc-500" />
+                    <span>AWS Connection</span>
+                  </div>
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      awsStatus?.connected ? 'bg-zinc-950' : 'bg-zinc-400'
+                    }`}
+                  />
+                </button>
+              </nav>
             </div>
 
-            {/* Bottom Half: Live Terminal Logs */}
-            <div className="h-[340px] shrink-0 overflow-hidden bg-zinc-950 border-t border-zinc-200">
-              <TerminalLogs
-                logs={logs}
-                onClear={() => setLogs([])}
-                currentBuild={currentBuild}
-              />
+            {/* Integrated Recent Builds Live Status List */}
+            <div className="pt-2 border-t border-zinc-200">
+              <div className="flex items-center justify-between px-2 pb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">
+                  Recent Builds
+                </span>
+                <button
+                  type="button"
+                  onClick={fetchRecentBuilds}
+                  className="text-zinc-400 hover:text-zinc-900 transition-colors"
+                  title="Refresh recent builds list"
+                >
+                  <RefreshCw className={`w-3 h-3 ${recentBuildsLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              <div className="space-y-1.5 max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
+                {recentBuilds.length === 0 ? (
+                  <div className="px-2 py-4 text-center text-[11px] text-zinc-400">
+                    No builds recorded yet.
+                  </div>
+                ) : (
+                  recentBuilds.slice(0, 10).map((b) => {
+                    const isSelected = currentBuild?.build_id === b.build_id
+                    return (
+                      <div
+                        key={b.build_id}
+                        onClick={() => handleSelectBuild(b)}
+                        className={`w-full text-left p-2 rounded-md border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'border-zinc-950 bg-zinc-50'
+                            : 'border-zinc-200 hover:border-zinc-300 bg-white hover:bg-zinc-50'
+                        }`}
+                        title={`Click to view build ${b.build_id}`}
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-medium text-zinc-950 text-[11px] truncate block">
+                            {b.ami_name || b.build_id.slice(0, 14)}
+                          </span>
+                          {b.status === 'running' && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-950 animate-ping shrink-0" />
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between mt-1 text-[10px] font-mono text-zinc-500">
+                          <span className="uppercase text-[9px] font-sans px-1 py-0.5 rounded bg-zinc-100 text-zinc-700">
+                            {b.status}
+                          </span>
+                          {b.ami_id ? (
+                            <span className="text-zinc-900 font-semibold">{b.ami_id.slice(0, 10)}...</span>
+                          ) : (
+                            <span>{b.region || config.region}</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      ) : (
-        /* AMI Dashboard & Build History Tab */
-        <div className="flex-1 overflow-hidden bg-white">
-          <AmiDashboard
-            region={config.region}
-            onLoadConfigToBuilder={handleLoadConfigToBuilder}
-          />
-        </div>
-      )}
+
+          {/* Sidebar Footer */}
+          <div className="p-3 border-t border-zinc-200 bg-zinc-50 text-[11px] text-zinc-500 font-mono flex items-center justify-between">
+            <span>Region</span>
+            <span className="text-zinc-900 font-semibold">{config.region}</span>
+          </div>
+        </aside>
+
+        {/* Main Content Area */}
+        <main className="flex-1 flex overflow-hidden">
+          {activeTab === 'builder' ? (
+            /* Split-Screen Visual Builder (3-Stage) & Monaco/Terminal Workspace */
+            <div className="flex-1 flex overflow-hidden">
+              {/* Left Panel: 3-Stage Visual Builder Form */}
+              <div className="w-[480px] shrink-0 h-full overflow-hidden flex flex-col bg-zinc-50 border-r border-zinc-200">
+                <VisualBuilder
+                  config={config}
+                  onChange={setConfig}
+                  catalogue={catalogue}
+                  catalogueLoading={catalogueLoading}
+                  isManualMode={isManualMode}
+                  onResetToForm={handleResetToForm}
+                  baseAMIs={baseAMIs}
+                  baseAMIsLoading={baseAMIsLoading}
+                  baseAMISource={baseAMISource}
+                  architecture={architecture}
+                  onArchChange={(arch) => setArchitecture(arch as 'x86_64' | 'arm64')}
+                  onBuild={handleBuild}
+                  onValidate={handleValidate}
+                  onPreflight={handlePreflightCheck}
+                  currentBuild={currentBuild}
+                />
+              </div>
+
+              {/* Right Panel: Split into Monaco Editor (Top) & Live Logs Terminal (Bottom) */}
+              <div className="flex-1 flex flex-col h-full overflow-hidden bg-white">
+                {/* Top Half: Monaco HCL Editor */}
+                <div className="flex-1 min-h-[260px] overflow-hidden bg-white">
+                  <HclEditor
+                    hclCode={hclCode}
+                    onChange={handleEditorChange}
+                    isManualMode={isManualMode}
+                    onResetToForm={handleResetToForm}
+                    onValidate={handleValidate}
+                    isValidating={isValidating}
+                    onPreflight={handlePreflightCheck}
+                    isPreflighting={isPreflighting}
+                    onBuild={handleBuild}
+                    onCancel={handleCancel}
+                    currentBuild={currentBuild}
+                    onSyncToForm={handleSyncToForm}
+                    isSyncingToForm={isSyncingToForm}
+                    syncNotification={syncNotification}
+                    onClearNotification={() => setSyncNotification(null)}
+                  />
+                </div>
+
+                {/* Bottom Half: Live Terminal Logs (Collapsible) */}
+                <div
+                  className={`${
+                    isTerminalCollapsed ? 'h-10' : 'h-[320px]'
+                  } shrink-0 overflow-hidden bg-zinc-950 border-t border-zinc-200 transition-all duration-200`}
+                >
+                  <TerminalLogs
+                    logs={logs}
+                    onClear={() => setLogs([])}
+                    currentBuild={currentBuild}
+                    isCollapsed={isTerminalCollapsed}
+                    onToggleCollapse={() => setIsTerminalCollapsed(!isTerminalCollapsed)}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* AMI Dashboard & Build History Tab */
+            <div className="flex-1 overflow-hidden bg-white">
+              <AmiDashboard
+                region={config.region}
+                onLoadConfigToBuilder={handleLoadConfigToBuilder}
+              />
+            </div>
+          )}
+        </main>
+      </div>
 
       {/* AWS Connection & Security Modal */}
       <AWSModal
@@ -654,3 +835,4 @@ export function App() {
 }
 
 export default App
+

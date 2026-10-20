@@ -63,6 +63,8 @@ export interface LogEntry {
 
 export interface BuildStatusSummary {
   build_id: string
+  ami_name?: string
+  region?: string
   status: 'idle' | 'pending' | 'running' | 'success' | 'failed' | 'cancelled' | 'cancelling'
   ami_id?: string
   region_to_ami?: Record<string, string>

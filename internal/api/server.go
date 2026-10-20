@@ -1081,6 +1081,8 @@ type Build struct {
 // BuildStatusSummary represents the serializable status of a build.
 type BuildStatusSummary struct {
 	BuildID     string            `json:"build_id"`
+	AMIName     string            `json:"ami_name,omitempty"`
+	Region      string            `json:"region,omitempty"`
 	Status      string            `json:"status"`
 	AMIID       string            `json:"ami_id,omitempty"`
 	RegionToAMI map[string]string `json:"region_to_ami,omitempty"`
@@ -1099,8 +1101,16 @@ func (b *Build) StatusSummary() BuildStatusSummary {
 }
 
 func (b *Build) statusSummaryLocked() BuildStatusSummary {
+	amiName := ""
+	region := ""
+	if b.Config != nil {
+		amiName = b.Config.AMIName
+		region = b.Config.Region
+	}
 	return BuildStatusSummary{
 		BuildID:     b.ID,
+		AMIName:     amiName,
+		Region:      region,
 		Status:      b.Status,
 		AMIID:       b.AMIID,
 		RegionToAMI: b.RegionToAMI,
@@ -1367,14 +1377,36 @@ func (bm *BuildManager) GetBuild(id string) *Build {
 	return bm.builds[id]
 }
 
-// ListBuilds returns all builds sorted by creation time descending.
+// ListBuilds returns all active and past builds sorted by creation time descending.
 func (bm *BuildManager) ListBuilds() []BuildStatusSummary {
 	bm.mu.RLock()
-	defer bm.mu.RUnlock()
-
+	seen := make(map[string]bool)
 	list := make([]BuildStatusSummary, 0, len(bm.builds))
 	for _, b := range bm.builds {
+		seen[b.ID] = true
 		list = append(list, b.StatusSummary())
+	}
+	bm.mu.RUnlock()
+
+	// If DB store is available, also append historic builds
+	if bm.store != nil {
+		if dbBuilds, err := bm.store.ListBuilds(); err == nil {
+			for _, dbB := range dbBuilds {
+				if seen[dbB.BuildID] {
+					continue
+				}
+				list = append(list, BuildStatusSummary{
+					BuildID:    dbB.BuildID,
+					AMIName:    dbB.AMIName,
+					Region:     dbB.Region,
+					Status:     dbB.Status,
+					AMIID:      dbB.AMIID,
+					DurationMs: int64(dbB.DurationSeconds) * 1000,
+					CreatedAt:  dbB.CreatedAt,
+					Error:      dbB.ErrorMessage,
+				})
+			}
+		}
 	}
 
 	sort.Slice(list, func(i, j int) bool {

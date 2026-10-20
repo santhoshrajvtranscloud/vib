@@ -16,12 +16,16 @@ interface TerminalLogsProps {
   logs: LogEntry[]
   onClear: () => void
   currentBuild: BuildStatusSummary | null
+  isCollapsed?: boolean
+  onToggleCollapse?: () => void
 }
 
 export const TerminalLogs: React.FC<TerminalLogsProps> = ({
   logs,
   onClear,
   currentBuild,
+  isCollapsed = false,
+  onToggleCollapse,
 }) => {
   const [filter, setFilter] = useState<'all' | 'stdout' | 'stderr' | 'system'>('all')
   const [autoScroll, setAutoScroll] = useState(true)
@@ -30,10 +34,10 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (autoScroll && terminalEndRef.current) {
+    if (autoScroll && terminalEndRef.current && !isCollapsed) {
       terminalEndRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [logs, autoScroll])
+  }, [logs, autoScroll, isCollapsed])
 
   const copyAMI = (ami: string) => {
     navigator.clipboard.writeText(ami)
@@ -59,57 +63,83 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
     <div className="flex flex-col h-full bg-zinc-950 text-xs font-mono">
       {/* Terminal Header Bar */}
       <div className="h-10 bg-zinc-50 border-b border-zinc-200 px-3 flex items-center justify-between shrink-0 select-none">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <TerminalIcon className="w-3.5 h-3.5 text-zinc-600" />
-          <span className="font-semibold text-zinc-950">Terminal Logs</span>
+          <span className="font-semibold text-zinc-950 font-sans">Build Output</span>
           <span className="text-[10px] text-zinc-500 font-mono">
             {logs.length} lines
           </span>
+
+          {/* Mini Status Pill when Collapsed */}
+          {isCollapsed && currentBuild && (
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-zinc-200 text-zinc-900 border border-zinc-300">
+              {currentBuild.status === 'running' && '● Building...'}
+              {currentBuild.status === 'success' && `✓ Succeeded (${currentBuild.ami_id || 'AMI Created'})`}
+              {currentBuild.status === 'failed' && '✗ Failed'}
+              {currentBuild.status === 'cancelled' && '⊘ Cancelled'}
+            </span>
+          )}
         </div>
 
         {/* Filters and Actions */}
         <div className="flex items-center gap-2">
-          {/* Stream Filter */}
-          <div className="flex items-center bg-zinc-100 rounded-md p-0.5 border border-zinc-200 text-[11px]">
-            {(['all', 'system', 'stdout', 'stderr'] as const).map((s) => (
+          {!isCollapsed && (
+            <>
+              {/* Stream Filter */}
+              <div className="flex items-center bg-zinc-100 rounded-md p-0.5 border border-zinc-200 text-[11px]">
+                {(['all', 'stdout', 'stderr', 'system'] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setFilter(s)}
+                    className={`px-2 py-0.5 rounded capitalize transition-colors ${
+                      filter === s
+                        ? 'bg-white text-zinc-950 font-medium shadow-2xs'
+                        : 'text-zinc-600 hover:text-zinc-950'
+                    }`}
+                  >
+                    {s === 'all' ? 'All logs' : s}
+                  </button>
+                ))}
+              </div>
+
+              {/* Auto Scroll Toggle */}
               <button
-                key={s}
                 type="button"
-                onClick={() => setFilter(s)}
-                className={`px-2 py-0.5 rounded capitalize transition-colors ${
-                  filter === s
-                    ? 'bg-white text-zinc-950 font-medium shadow-2xs'
-                    : 'text-zinc-600 hover:text-zinc-950'
+                onClick={() => setAutoScroll(!autoScroll)}
+                className={`p-1.5 rounded-md border transition-colors shadow-2xs ${
+                  autoScroll
+                    ? 'border-zinc-300 bg-white text-zinc-950'
+                    : 'border-zinc-200 bg-zinc-100 text-zinc-500 hover:text-zinc-900'
                 }`}
+                title={autoScroll ? 'Auto-scroll enabled' : 'Auto-scroll disabled'}
               >
-                {s}
+                <ArrowDown className="w-3.5 h-3.5" />
               </button>
-            ))}
-          </div>
 
-          {/* Auto Scroll Toggle */}
-          <button
-            type="button"
-            onClick={() => setAutoScroll(!autoScroll)}
-            className={`p-1.5 rounded-md border transition-colors shadow-2xs ${
-              autoScroll
-                ? 'border-zinc-300 bg-white text-zinc-950'
-                : 'border-zinc-200 bg-zinc-100 text-zinc-500 hover:text-zinc-900'
-            }`}
-            title={autoScroll ? 'Auto-scroll enabled' : 'Auto-scroll disabled'}
-          >
-            <ArrowDown className="w-3.5 h-3.5" />
-          </button>
+              {/* Clear Logs */}
+              <button
+                type="button"
+                onClick={onClear}
+                className="p-1.5 text-zinc-600 hover:text-zinc-950 bg-white border border-zinc-200 hover:border-zinc-300 rounded-md transition-colors shadow-2xs"
+                title="Clear logs"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </>
+          )}
 
-          {/* Clear Logs */}
-          <button
-            type="button"
-            onClick={onClear}
-            className="p-1.5 text-zinc-600 hover:text-zinc-950 bg-white border border-zinc-200 hover:border-zinc-300 rounded-md transition-colors shadow-2xs"
-            title="Clear logs"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {/* Expand / Collapse Toggle Button */}
+          {onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="px-2 py-1 text-zinc-600 hover:text-zinc-950 bg-white border border-zinc-200 hover:border-zinc-300 rounded-md transition-colors shadow-2xs flex items-center gap-1 text-[11px] font-sans"
+              title={isCollapsed ? 'Expand build output terminal' : 'Collapse terminal'}
+            >
+              <span>{isCollapsed ? 'Expand' : 'Collapse'}</span>
+            </button>
+          )}
         </div>
       </div>
 

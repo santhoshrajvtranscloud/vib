@@ -215,6 +215,10 @@ func ListOfficialBaseAMIsWithClient(ctx context.Context, client EC2DescribeImage
 		})
 
 		latest := output.Images[0]
+		ownerID := aws.ToString(latest.OwnerId)
+		if ownerID == "" {
+			ownerID = spec.OwnerID
+		}
 		discovered = append(discovered, BaseAMI{
 			ID:           aws.ToString(latest.ImageId),
 			Name:         aws.ToString(latest.Name),
@@ -225,7 +229,7 @@ func ListOfficialBaseAMIsWithClient(ctx context.Context, client EC2DescribeImage
 			DefaultUser:  spec.DefaultUser,
 			CreationDate: aws.ToString(latest.CreationDate),
 			Description:  spec.Description,
-			OwnerID:      spec.OwnerID,
+			OwnerID:      ownerID,
 		})
 	}
 
