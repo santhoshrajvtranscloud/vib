@@ -58,6 +58,21 @@ func TestParseHCLRoundTrip(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "VPC and Subnet Configured",
+			inputCfg: &config.BuildConfig{
+				AMIName:      "vib-vpc-builder",
+				Region:       "us-east-1",
+				InstanceType: "t3.micro",
+				SourceAMI:    "ami-0123456789abcdef0",
+				SSHUsername:  "ubuntu",
+				BuildID:      "build-vpc-1",
+				VPCID:        "vpc-0123456789abcdef0",
+				SubnetID:     "subnet-0123456789abcdef0",
+				Packages:     []string{"nginx"},
+				CustomScript: []string{},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -89,6 +104,12 @@ func TestParseHCLRoundTrip(t *testing.T) {
 			}
 			if parsedCfg.SSHUsername != tc.inputCfg.SSHUsername {
 				t.Errorf("SSHUsername mismatch: got %q, want %q", parsedCfg.SSHUsername, tc.inputCfg.SSHUsername)
+			}
+			if parsedCfg.VPCID != tc.inputCfg.VPCID {
+				t.Errorf("VPCID mismatch: got %q, want %q", parsedCfg.VPCID, tc.inputCfg.VPCID)
+			}
+			if parsedCfg.SubnetID != tc.inputCfg.SubnetID {
+				t.Errorf("SubnetID mismatch: got %q, want %q", parsedCfg.SubnetID, tc.inputCfg.SubnetID)
 			}
 			if tc.inputCfg.BuildID != "" && parsedCfg.BuildID != tc.inputCfg.BuildID {
 				t.Errorf("BuildID mismatch: got %q, want %q", parsedCfg.BuildID, tc.inputCfg.BuildID)

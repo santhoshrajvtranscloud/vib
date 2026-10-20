@@ -14,8 +14,11 @@ import {
   Layers,
   Loader2,
   Edit3,
+  Network,
+  RefreshCw,
 } from 'lucide-react'
-import type { BuildConfig, CataloguePackage, BaseAMI } from '../types'
+import type { BuildConfig, CataloguePackage, BaseAMI, NetworksResponse } from '../types'
+import { apiFetch } from '../api'
 
 interface VisualBuilderProps {
   config: BuildConfig
@@ -70,6 +73,43 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
     (config.custom_script || []).join('\n')
   )
   const [showManualAMI, setShowManualAMI] = useState(false)
+  const [showNetworkSection, setShowNetworkSection] = useState(
+    Boolean(config.vpc_id || config.subnet_id)
+  )
+  const [networks, setNetworks] = useState<NetworksResponse | null>(null)
+  const [loadingNetworks, setLoadingNetworks] = useState(false)
+  const [networkError, setNetworkError] = useState<string | null>(null)
+
+  const fetchNetworks = async (region: string) => {
+    try {
+      setLoadingNetworks(true)
+      setNetworkError(null)
+      const res = await apiFetch(`/api/aws/networks?region=${region}`)
+      if (!res.ok) {
+        throw new Error(`Failed to load networks (${res.status})`)
+      }
+      const data: NetworksResponse = await res.json()
+      setNetworks(data)
+    } catch (err: any) {
+      setNetworkError(err.message || 'Failed to discover AWS VPCs')
+    } finally {
+      setLoadingNetworks(false)
+    }
+  }
+
+  const toggleNetworkSection = () => {
+    const next = !showNetworkSection
+    setShowNetworkSection(next)
+    if (next && !networks) {
+      fetchNetworks(config.region)
+    }
+  }
+
+  React.useEffect(() => {
+    if (showNetworkSection) {
+      fetchNetworks(config.region)
+    }
+  }, [config.region])
 
   const updateField = <K extends keyof BuildConfig>(key: K, value: BuildConfig[K]) => {
     onChange({
@@ -208,6 +248,111 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Advanced Network (VPC / Subnet) Collapsible */}
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={toggleNetworkSection}
+              className="w-full flex items-center justify-between text-xs text-zinc-400 hover:text-white p-2 rounded-md bg-zinc-950 border border-zinc-800 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Network className="w-3.5 h-3.5 text-zinc-400" />
+                <span className="font-medium text-zinc-300">Advanced Network (VPC / Subnet)</span>
+                {config.vpc_id && (
+                  <span className="text-[10px] font-mono text-zinc-300 bg-zinc-900 border border-zinc-700 px-1.5 py-0.2 rounded">
+                    Custom VPC
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1 text-[11px] text-zinc-500">
+                <span>{showNetworkSection ? 'Hide' : 'Configure'}</span>
+                {showNetworkSection ? (
+                  <ChevronUp className="w-3.5 h-3.5 text-zinc-400" />
+                ) : (
+                  <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                )}
+              </div>
+            </button>
+
+            {showNetworkSection && (
+              <div className="mt-2 p-3 bg-zinc-950 border border-zinc-800 rounded-md space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-zinc-400">
+                    Network target in <code className="text-zinc-200">{config.region}</code>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => fetchNetworks(config.region)}
+                    disabled={loadingNetworks}
+                    className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-white transition-colors"
+                    title="Refresh VPC and Subnet list"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${loadingNetworks ? 'animate-spin' : ''}`} />
+                    <span>Refresh</span>
+                  </button>
+                </div>
+
+                {loadingNetworks ? (
+                  <div className="flex items-center justify-center py-4 text-xs text-zinc-400 gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-400" />
+                    <span>Querying AWS VPCs and Subnets...</span>
+                  </div>
+                ) : networkError ? (
+                  <div className="p-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-300">
+                    <p className="font-mono text-[11px] text-zinc-400">{networkError}</p>
+                    <p className="text-[10px] text-zinc-500 mt-1">Default VPC will be used by Packer automatically.</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* VPC Select */}
+                    <div>
+                      <label className="block text-[11px] font-medium text-zinc-300 mb-1">
+                        Virtual Private Cloud (VPC)
+                      </label>
+                      <select
+                        value={config.vpc_id || ''}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          updateField('vpc_id', val || undefined)
+                          updateField('subnet_id', undefined)
+                        }}
+                        className="w-full bg-zinc-900 border border-zinc-800 text-white rounded-md px-2.5 py-1.5 text-xs font-mono focus:border-white focus:ring-0 outline-none"
+                      >
+                        <option value="">Default VPC (Auto-detect by Packer)</option>
+                        {networks?.vpcs.map((vpc) => (
+                          <option key={vpc.vpc_id} value={vpc.vpc_id}>
+                            {vpc.name} ({vpc.vpc_id}) — {vpc.cidr} {vpc.is_default ? '★ Default' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Subnet Select */}
+                    <div>
+                      <label className="block text-[11px] font-medium text-zinc-300 mb-1">
+                        Subnet (Optional)
+                      </label>
+                      <select
+                        value={config.subnet_id || ''}
+                        onChange={(e) => updateField('subnet_id', e.target.value || undefined)}
+                        className="w-full bg-zinc-900 border border-zinc-800 text-white rounded-md px-2.5 py-1.5 text-xs font-mono focus:border-white focus:ring-0 outline-none"
+                      >
+                        <option value="">Auto-assign Subnet in VPC</option>
+                        {(networks?.subnets || [])
+                          .filter((s) => !config.vpc_id || s.vpc_id === config.vpc_id)
+                          .map((s) => (
+                            <option key={s.subnet_id} value={s.subnet_id}>
+                              {s.name} ({s.subnet_id}) — {s.availability_zone} {s.public_ip_on_launch ? '[Public IP]' : ''}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

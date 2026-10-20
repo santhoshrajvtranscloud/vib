@@ -55,4 +55,14 @@ echo "Testing: AST Security Gate (shell-local provisioner)"
 STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8999/api/hcl/validate -H "Content-Type: application/json" -H "X-VIB-CSRF-Protection: 1" -d '{"hcl":"source \"amazon-ebs\" \"vib\" { ami_name=\"x\" instance_type=\"t3.micro\" region=\"ap-south-1\" source_ami=\"ami-123\" } build { sources=[\"source.amazon-ebs.vib\"] provisioner \"shell-local\" { inline=[\"id\"] } }"}')
 if [ "$STATUS" -eq 400 ]; then echo "✓ Passed: Malicious shell-local provisioner blocked (400)"; else echo "✗ Failed: Expected 400, got $STATUS"; exit 1; fi
 
+# 8. Test Invalid VPC format rejected
+echo "Testing: Invalid VPC ID format"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8999/api/hcl/generate -H "Content-Type: application/json" -H "X-VIB-CSRF-Protection: 1" -d '{"region":"ap-south-1","instance_type":"t3.micro","source_ami":"ami-0123456789abcdef0","ami_name":"test-ami","vpc_id":"not-a-vpc"}')
+if [ "$STATUS" -eq 400 ]; then echo "✓ Passed: Invalid VPC format rejected (400)"; else echo "✗ Failed: Expected 400, got $STATUS"; exit 1; fi
+
+# 9. Test Preflight check endpoint
+echo "Testing: AWS Pre-flight check endpoint"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8999/api/aws/preflight -H "Content-Type: application/json" -H "X-VIB-CSRF-Protection: 1" -d '{"region":"ap-south-1","source_ami":"ami-0123456789abcdef0","instance_type":"t3.micro"}')
+if [ "$STATUS" -eq 200 ]; then echo "✓ Passed: Preflight check executed (200)"; else echo "✗ Failed: Expected 200, got $STATUS"; exit 1; fi
+
 echo "=== All edge cases handled safely! ==="

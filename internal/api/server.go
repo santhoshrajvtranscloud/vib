@@ -108,6 +108,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/aws/credentials", s.handleSaveAWSCredentials)
 	s.mux.HandleFunc("DELETE /api/aws/credentials", s.handleClearAWSCredentials)
 	s.mux.HandleFunc("GET /api/aws/base-amis", s.handleGetBaseAMIs)
+	s.mux.HandleFunc("POST /api/aws/preflight", s.handleAWSPreflight)
+	s.mux.HandleFunc("GET /api/aws/networks", s.handleListNetworks)
 
 	// VIB AMI & Lifecycle Endpoints (Milestone 4)
 	s.mux.HandleFunc("GET /api/images", s.handleListImages)
@@ -766,6 +768,68 @@ func (s *Server) handleGetBaseAMIs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+// PreflightRequest represents payload for POST /api/aws/preflight
+type PreflightRequest struct {
+	Region       string `json:"region"`
+	SourceAMI    string `json:"source_ami"`
+	InstanceType string `json:"instance_type"`
+}
+
+// handleAWSPreflight executes the 4-step AWS readiness check.
+func (s *Server) handleAWSPreflight(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var req PreflightRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "Request payload exceeds 1MB limit")
+			return
+		}
+		writeError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	defer r.Body.Close()
+
+	region := strings.TrimSpace(req.Region)
+	if region == "" {
+		region = "ap-south-1"
+	}
+	sourceAMI := strings.TrimSpace(req.SourceAMI)
+	instanceType := strings.TrimSpace(req.InstanceType)
+	if instanceType == "" {
+		instanceType = "t3.micro"
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+
+	cfg, _ := s.credManager.GetAWSConfig(ctx, region)
+	report := vibaws.RunPreflightCheck(ctx, cfg, region, sourceAMI, instanceType)
+
+	writeJSON(w, http.StatusOK, report)
+}
+
+// handleListNetworks returns VPCs and Subnets for the requested region.
+func (s *Server) handleListNetworks(w http.ResponseWriter, r *http.Request) {
+	region := r.URL.Query().Get("region")
+	if region == "" {
+		region = "ap-south-1"
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	cfg, _ := s.credManager.GetAWSConfig(ctx, region)
+	networks, err := vibaws.ListNetworks(ctx, cfg, region)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to list networks: %v", err))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, networks)
+}
+
+
 // ImageItem represents a unified AMI record combining live AWS metadata and SQLite build configuration.
 type ImageItem struct {
 	BuildID         string            `json:"build_id,omitempty"`
@@ -1178,6 +1242,17 @@ func (bm *BuildManager) CreateAndStartBuild(id, hclContent string, cfg *config.B
 	if _, exists := bm.builds[id]; exists {
 		bm.mu.Unlock()
 		return nil, fmt.Errorf("build with ID %q already exists", id)
+	}
+
+	// Enforce maximum of 1 active running build at a time
+	for _, b := range bm.builds {
+		b.mu.RLock()
+		st := b.Status
+		b.mu.RUnlock()
+		if st == "running" || st == "pending" || st == "cancelling" {
+			bm.mu.Unlock()
+			return nil, errors.New("a build is already in progress")
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

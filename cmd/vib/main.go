@@ -41,11 +41,11 @@ func main() {
 	if *serve {
 		listenAddr := *addr
 		if listenAddr == "" {
-			if strings.HasPrefix(*port, ":") {
-				listenAddr = *port
-			} else {
-				listenAddr = ":" + *port
+			cleanPort := *port
+			if strings.HasPrefix(cleanPort, ":") {
+				cleanPort = strings.TrimPrefix(cleanPort, ":")
 			}
+			listenAddr = "127.0.0.1:" + cleanPort
 		}
 
 		apiServer := api.NewServer(runner)

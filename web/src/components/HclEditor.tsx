@@ -11,6 +11,7 @@ import {
   SlidersHorizontal,
   AlertCircle,
   X,
+  ShieldCheck,
 } from 'lucide-react'
 import type { BuildStatusSummary } from '../types'
 
@@ -21,6 +22,8 @@ interface HclEditorProps {
   onResetToForm: () => void
   onValidate: () => void
   isValidating: boolean
+  onPreflight?: () => void
+  isPreflighting?: boolean
   onBuild: () => void
   onCancel: () => void
   currentBuild: BuildStatusSummary | null
@@ -37,6 +40,8 @@ export const HclEditor: React.FC<HclEditorProps> = ({
   onResetToForm,
   onValidate,
   isValidating,
+  onPreflight,
+  isPreflighting = false,
   onBuild,
   onCancel,
   currentBuild,
@@ -141,6 +146,29 @@ export const HclEditor: React.FC<HclEditorProps> = ({
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2">
+          {/* Pre-Flight Button */}
+          {onPreflight && (
+            <button
+              type="button"
+              onClick={onPreflight}
+              disabled={isPreflighting || isBuilding}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border border-zinc-700 text-zinc-300 hover:border-zinc-400 hover:text-white bg-transparent disabled:opacity-50 transition-colors"
+              title="Run AWS Pre-Flight readiness check (STS, Network, AMI, EC2 Permissions)"
+            >
+              {isPreflighting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-400" />
+                  Pre-Flight...
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-3.5 h-3.5 text-zinc-400" />
+                  Pre-Flight
+                </>
+              )}
+            </button>
+          )}
+
           {/* Validate Button */}
           <button
             type="button"

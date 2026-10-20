@@ -16,6 +16,7 @@ import type {
   AWSIdentityInfo,
   BaseAMI,
   BaseAMIResponse,
+  PreflightReport,
 } from './types'
 
 const DEFAULT_CONFIG: BuildConfig = {
@@ -40,6 +41,7 @@ export function App() {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [currentBuild, setCurrentBuild] = useState<BuildStatusSummary | null>(null)
   const [isValidating, setIsValidating] = useState(false)
+  const [isPreflighting, setIsPreflighting] = useState(false)
 
   // AWS Integration States
   const [awsStatus, setAwsStatus] = useState<AWSIdentityInfo | null>(null)
@@ -338,6 +340,63 @@ export function App() {
     }
   }
 
+  // 6b. Run AWS Pre-Flight Readiness Check
+  const handlePreflightCheck = async () => {
+    setIsPreflighting(true)
+    setActiveTab('builder')
+
+    const startMsg: LogEntry = {
+      timestamp: new Date().toISOString(),
+      stream: 'system',
+      message: `==> [Pre-Flight Diagnostic] Running 4-step AWS readiness check for region '${config.region}'...`,
+    }
+    setLogs((prev) => [...prev, startMsg])
+
+    try {
+      const res = await apiFetch('/api/aws/preflight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          region: config.region,
+          source_ami: config.source_ami,
+          instance_type: config.instance_type,
+        }),
+      })
+
+      if (!res.ok) {
+        throw new Error(`Pre-flight diagnostic failed with status ${res.status}`)
+      }
+
+      const report: PreflightReport = await res.json()
+      const checkLogs: LogEntry[] = report.checks.map((chk) => ({
+        timestamp: new Date().toISOString(),
+        stream: chk.passed ? 'stdout' : 'stderr',
+        message: `[${chk.passed ? '✓' : '✗'}] ${chk.title}: ${chk.message}`,
+      }))
+
+      const conclusionLog: LogEntry = {
+        timestamp: new Date().toISOString(),
+        stream: 'system',
+        message: report.passed
+          ? '==> [Pre-Flight Diagnostic] AWS infrastructure is 100% READY for building AMIs!'
+          : '==> [Pre-Flight Diagnostic] Action needed: Resolve the failed checks above before building.',
+      }
+
+      setLogs((prev) => [...prev, ...checkLogs, conclusionLog])
+    } catch (err: any) {
+      setLogs((prev) => [
+        ...prev,
+        {
+          timestamp: new Date().toISOString(),
+          stream: 'stderr',
+          message: `[✗] Pre-Flight Diagnostic error: ${err.message || 'Unknown network error'}`,
+        },
+      ])
+    } finally {
+      setIsPreflighting(false)
+    }
+  }
+
   // 7. Start Build
   const handleBuild = async () => {
     setLogs([
@@ -535,6 +594,8 @@ export function App() {
                 onResetToForm={handleResetToForm}
                 onValidate={handleValidate}
                 isValidating={isValidating}
+                onPreflight={handlePreflightCheck}
+                isPreflighting={isPreflighting}
                 onBuild={handleBuild}
                 onCancel={handleCancel}
                 currentBuild={currentBuild}

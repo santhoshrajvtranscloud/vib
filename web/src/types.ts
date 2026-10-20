@@ -7,6 +7,45 @@ export interface BuildConfig {
   ami_name: string
   packages: string[]
   custom_script?: string[]
+  vpc_id?: string
+  subnet_id?: string
+}
+
+export interface VPCInfo {
+  vpc_id: string
+  name: string
+  is_default: boolean
+  cidr: string
+}
+
+export interface SubnetInfo {
+  subnet_id: string
+  vpc_id: string
+  availability_zone: string
+  name: string
+  public_ip_on_launch: boolean
+  available_ip_count?: number
+}
+
+export interface NetworksResponse {
+  region: string
+  vpcs: VPCInfo[]
+  subnets: SubnetInfo[]
+}
+
+export interface PreflightItem {
+  name: string
+  title: string
+  passed: boolean
+  message: string
+  details?: string
+}
+
+export interface PreflightReport {
+  region: string
+  passed: boolean
+  checks: PreflightItem[]
+  timestamp: string
 }
 
 export interface CataloguePackage {

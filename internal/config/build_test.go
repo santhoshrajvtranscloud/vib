@@ -77,4 +77,54 @@ func TestParseAndValidateSecurity(t *testing.T) {
 			t.Fatal("expected error on invalid instance_type, got nil")
 		}
 	})
+
+	t.Run("Valid VPC and Subnet IDs accepted", func(t *testing.T) {
+		payload := []byte(`{
+			"region": "us-east-1",
+			"instance_type": "t3.micro",
+			"source_ami": "ami-0123456789abcdef0",
+			"ami_name": "valid-name",
+			"vpc_id": "vpc-0123456789abcdef0",
+			"subnet_id": "subnet-0123456789abcdef0"
+		}`)
+		cfg, err := ParseAndValidate(payload)
+		if err != nil {
+			t.Fatalf("expected valid VPC and Subnet config, got error: %v", err)
+		}
+		if cfg.VPCID != "vpc-0123456789abcdef0" {
+			t.Errorf("expected VPCID 'vpc-0123456789abcdef0', got %q", cfg.VPCID)
+		}
+		if cfg.SubnetID != "subnet-0123456789abcdef0" {
+			t.Errorf("expected SubnetID 'subnet-0123456789abcdef0', got %q", cfg.SubnetID)
+		}
+	})
+
+	t.Run("Invalid VPC ID rejected", func(t *testing.T) {
+		payload := []byte(`{
+			"region": "us-east-1",
+			"instance_type": "t3.micro",
+			"source_ami": "ami-0123456789abcdef0",
+			"ami_name": "valid-name",
+			"vpc_id": "invalid-vpc-id"
+		}`)
+		_, err := ParseAndValidate(payload)
+		if err == nil {
+			t.Fatal("expected error on invalid vpc_id, got nil")
+		}
+	})
+
+	t.Run("Invalid Subnet ID rejected", func(t *testing.T) {
+		payload := []byte(`{
+			"region": "us-east-1",
+			"instance_type": "t3.micro",
+			"source_ami": "ami-0123456789abcdef0",
+			"ami_name": "valid-name",
+			"subnet_id": "invalid-subnet-id"
+		}`)
+		_, err := ParseAndValidate(payload)
+		if err == nil {
+			t.Fatal("expected error on invalid subnet_id, got nil")
+		}
+	})
 }
+

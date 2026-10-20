@@ -1323,3 +1323,65 @@ build {
 	})
 }
 
+func TestBuildConcurrencyGuard(t *testing.T) {
+	slowMock := createSlowMockPacker(t)
+	runner := packer.NewRunner(slowMock)
+	server := NewServer(runner)
+
+	validHCL := `
+source "amazon-ebs" "test" {
+  ami_name = "test-ami"
+  region = "us-east-1"
+  instance_type = "t3.micro"
+  source_ami = "ami-0123456789abcdef0"
+}
+build {
+  sources = ["source.amazon-ebs.test"]
+}
+`
+	payload, _ := json.Marshal(map[string]string{"hcl": validHCL})
+
+	// Start first build
+	req1 := newTestRequest(http.MethodPost, "/api/builds", bytes.NewReader(payload))
+	w1 := httptest.NewRecorder()
+	server.Routes().ServeHTTP(w1, req1)
+	if w1.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 Accepted for first build, got %d: %s", w1.Code, w1.Body.String())
+	}
+
+	// Try to launch second concurrent build
+	req2 := newTestRequest(http.MethodPost, "/api/builds", bytes.NewReader(payload))
+	w2 := httptest.NewRecorder()
+	server.Routes().ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusConflict {
+		t.Errorf("expected 409 Conflict for concurrent build, got %d: %s", w2.Code, w2.Body.String())
+	}
+	if !strings.Contains(w2.Body.String(), "a build is already in progress") {
+		t.Errorf("expected 'a build is already in progress', got: %s", w2.Body.String())
+	}
+}
+
+func TestPreflightEndpoint(t *testing.T) {
+	runner := packer.NewRunner(createMockPacker(t))
+	server := NewServer(runner)
+
+	payload := []byte(`{"region":"ap-south-1","source_ami":"ami-0123456789abcdef0","instance_type":"t3.micro"}`)
+	req := newTestRequest(http.MethodPost, "/api/aws/preflight", bytes.NewReader(payload))
+	w := httptest.NewRecorder()
+	server.Routes().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from preflight, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode preflight json: %v", err)
+	}
+	if _, ok := resp["checks"]; !ok {
+		t.Errorf("expected 'checks' array in preflight response")
+	}
+}
+
+

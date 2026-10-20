@@ -82,6 +82,10 @@ func extractSourceAttributes(body *hclsyntax.Body, fileBytes []byte, cfg *config
 			cfg.SourceAMI = strVal
 		case "ssh_username":
 			cfg.SSHUsername = strVal
+		case "vpc_id":
+			cfg.VPCID = strVal
+		case "subnet_id":
+			cfg.SubnetID = strVal
 		case "ami_name":
 			// Strip trailing -{{timestamp}} or -{{ timestamp }} if present
 			cleaned := strings.TrimSuffix(strVal, "-{{timestamp}}")

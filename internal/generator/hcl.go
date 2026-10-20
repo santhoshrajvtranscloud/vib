@@ -48,6 +48,12 @@ func GenerateHCL(cfg *config.BuildConfig) ([]byte, error) {
 	sourceBody.SetAttributeValue("region", cty.StringVal(cfg.Region))
 	sourceBody.SetAttributeValue("source_ami", cty.StringVal(cfg.SourceAMI))
 	sourceBody.SetAttributeValue("ssh_username", cty.StringVal(cfg.SSHUsername))
+	if cfg.VPCID != "" {
+		sourceBody.SetAttributeValue("vpc_id", cty.StringVal(cfg.VPCID))
+	}
+	if cfg.SubnetID != "" {
+		sourceBody.SetAttributeValue("subnet_id", cty.StringVal(cfg.SubnetID))
+	}
 
 	buildID := cfg.BuildID
 	if buildID == "" {

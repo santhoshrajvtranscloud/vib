@@ -168,7 +168,11 @@ func (r *Runner) PrepareWorkDir(cfg *config.BuildConfig, hclBytes []byte, custom
 		if cfg != nil && cfg.BuildID != "" {
 			prefix = fmt.Sprintf("vib-build-%s-", sanitizeID(cfg.BuildID))
 		}
-		tempDir, err := os.MkdirTemp("", prefix)
+		vibBaseDir := filepath.Join(os.TempDir(), "vib-builds")
+		if err := os.MkdirAll(vibBaseDir, 0750); err != nil {
+			return "", nil, fmt.Errorf("failed to create base builds directory: %w", err)
+		}
+		tempDir, err := os.MkdirTemp(vibBaseDir, prefix)
 		if err != nil {
 			return "", nil, fmt.Errorf("failed to create temporary working directory: %w", err)
 		}

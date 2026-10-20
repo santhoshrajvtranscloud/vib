@@ -17,6 +17,8 @@ type BuildConfig struct {
 	AMIName      string   `json:"ami_name"`
 	Packages     []string `json:"packages"`
 	CustomScript []string `json:"custom_script,omitempty"`
+	VPCID        string   `json:"vpc_id,omitempty"`
+	SubnetID     string   `json:"subnet_id,omitempty"`
 }
 
 var (
@@ -24,6 +26,8 @@ var (
 	amiNameRegex      = regexp.MustCompile(`^[a-zA-Z0-9-_]{1,128}$`)
 	regionRegex       = regexp.MustCompile(`^[a-z0-9-]+$`)
 	instanceTypeRegex = regexp.MustCompile(`^[a-z0-9]+\.[a-z0-9]+$`)
+	vpcRegex          = regexp.MustCompile(`^vpc-[a-z0-9]{8,17}$`)
+	subnetRegex       = regexp.MustCompile(`^subnet-[a-z0-9]{8,17}$`)
 )
 
 func ParseAndValidate(data []byte) (*BuildConfig, error) {
@@ -45,6 +49,12 @@ func ParseAndValidate(data []byte) (*BuildConfig, error) {
 	}
 	if strings.TrimSpace(cfg.AMIName) == "" || !amiNameRegex.MatchString(cfg.AMIName) {
 		return nil, errors.New("ami_name is required and must only contain alphanumeric characters, hyphens, and underscores (1-128 chars)")
+	}
+	if strings.TrimSpace(cfg.VPCID) != "" && !vpcRegex.MatchString(strings.TrimSpace(cfg.VPCID)) {
+		return nil, errors.New("vpc_id must be a valid VPC ID starting with 'vpc-'")
+	}
+	if strings.TrimSpace(cfg.SubnetID) != "" && !subnetRegex.MatchString(strings.TrimSpace(cfg.SubnetID)) {
+		return nil, errors.New("subnet_id must be a valid Subnet ID starting with 'subnet-'")
 	}
 	return &cfg, nil
 }
